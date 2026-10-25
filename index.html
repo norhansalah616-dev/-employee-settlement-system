@@ -1,1519 +1,951 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot 
-} from 'firebase/firestore';
-import { 
-  UserPlus, 
-  Search, 
-  Trash2, 
-  Edit3, 
-  Download, 
-  Upload, 
-  CheckCircle2, 
-  AlertTriangle, 
-  FileSpreadsheet, 
-  Users, 
-  DollarSign, 
-  Hash, 
-  IdCard, 
-  Sparkles, 
-  X, 
-  Check, 
-  RefreshCw, 
-  ClipboardPaste,
-  Filter,
-  ShieldCheck,
-  Eye,
-  Lock,
-  Copyright,
-  ExternalLink
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>منظومة شيت التسويات التفاعلي | نورهان صلاح</title>
+  
+  <!-- خط القاهرة من Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- مكتبة Tailwind CSS للتصميم -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- مكتبة FontAwesome للأيقونات -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-// ==========================================
-// 1. إعدادات الاتصال السحابي والمزامنة الفورية
-// ==========================================
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'employee-settlement-app';
-
-// بيانات حقوق الملكية والبورتفوليو الثابتة
-const OWNER_NAME = 'نورهان صلاح';
-const PORTFOLIO_URL = 'https://nourhan-salah.github.io/nour-portfolio/';
-
-export default function App() {
-  // حالات المستخدم والاتصال
-  const [user, setUser] = useState(null);
-  const [isSyncing, setIsSyncing] = useState(true);
-  const [syncError, setSyncError] = useState(null);
-
-  // بيانات الموظفين من القاعدة اللحظية
-  const [employees, setEmployees] = useState([]);
-
-  // حالة حماية الكود المصدري (مفعلة دائماً)
-  const [sourceProtectionEnabled] = useState(true);
-
-  // حالات نموذج الإدخال والتعديل
-  const [ledgerNo, setLedgerNo] = useState('');
-  const [empName, setEmpName] = useState('');
-  const [empId, setEmpId] = useState('');
-  const [netSettlement, setNetSettlement] = useState('');
-  const [notes, setNotes] = useState('');
-  const [editingDocId, setEditingDocId] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // حالات البحث والفلترة والترتيب
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchField, setSearchField] = useState('all'); // 'all', 'name', 'empId', 'ledgerNo'
-  const [sortBy, setSortBy] = useState('createdAtDesc'); // 'createdAtDesc', 'ledgerAsc', 'nameAsc', 'amountDesc', 'amountAsc'
-
-  // حالات التحديد المتعدد والحذف
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [confirmDeleteItem, setConfirmDeleteItem] = useState(null); // { id, name, isBulk }
-
-  // حالات الاستيراد من إكسل (لصق أو ملف)
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [pasteData, setPasteData] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
-
-  // حالات الإشعارات (Toast)
-  const [toast, setToast] = useState(null);
-  const fileInputRef = useRef(null);
-
-  // دالة إظهار إشعار سريع
-  const showNotification = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => {
-      setToast((prev) => (prev?.message === message ? null : prev));
-    }, 4000);
-  };
-
-  // ==========================================
-  // 2. مصادقة المستخدم الفورية (Rule 3)
-  // ==========================================
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error('Auth error:', err);
-        setSyncError('تعذر الاتصال بخادم المصادقة');
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // ==========================================
-  // 3. الاستماع اللحظي للبيانات المشتركة (Rule 1 & 2)
-  // ==========================================
-  useEffect(() => {
-    if (!user) return;
-    setIsSyncing(true);
-
-    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'settlement_records');
-    
-    const unsubscribe = onSnapshot(
-      colRef,
-      (snapshot) => {
-        const loaded = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data()
-        }));
-        setEmployees(loaded);
-        setIsSyncing(false);
-        setSyncError(null);
-      },
-      (error) => {
-        console.error('Firestore sync error:', error);
-        setSyncError('حدث خطأ أثناء المزامنة الحية للبيانات');
-        setIsSyncing(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // الاستماع اللحظي لإعدادات حقوق الملكية (Copyright) وحماية الكود المصدري ليظهر اسمك لدى الجميع
-  useEffect(() => {
-    if (!user) return;
-
-    const settingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_settings', 'copyright_config');
-    const unsubscribe = onSnapshot(
-      settingsDocRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.ownerName) setOwnerName(data.ownerName);
-          if (data.ownerTitle !== undefined) setOwnerTitle(data.ownerTitle);
-          if (data.ownerPinHash !== undefined) setOwnerPinHash(data.ownerPinHash);
-          if (typeof data.sourceProtectionEnabled === 'boolean') {
-            setSourceProtectionEnabled(data.sourceProtectionEnabled);
-          }
-        }
-      },
-      (err) => {
-        console.error('Settings sync error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // ==========================================
-  // 3.5 نظام قفل وحماية الـ Source Code (Client-Side Protection)
-  // ==========================================
-  useEffect(() => {
-    if (!sourceProtectionEnabled) return;
-
-    const triggerSecurityAlert = (reason) => {
-      showNotification(`🔒 عفواً، الكود المصدري وحقوق التصميم محمية (${reason}) — ${OWNER_NAME}`, 'error');
-    };
-
-    // منع كليك يمين (Context Menu)
-    const handleContextMenu = (e) => {
-      e.preventDefault();
-      triggerSecurityAlert('قفل القائمة المنسدلة');
-      return false;
-    };
-
-    // منع اختصارات لوحة المفاتيح الخاصة بفحص الكود أو حفظ الصفحة
-    const handleKeyDown = (e) => {
-      const key = e.key?.toUpperCase();
-      const ctrlOrMeta = e.ctrlKey || e.metaKey;
-
-      // F12
-      if (e.key === 'F12' || e.keyCode === 123) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerSecurityAlert('منع F12');
-        return false;
-      }
-
-      // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C (أدوات المطورين)
-      if (ctrlOrMeta && e.shiftKey && ['I', 'J', 'C', 'K'].includes(key)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerSecurityAlert('قفل فحص العناصر');
-        return false;
-      }
-
-      // Ctrl+U (عرض الكود المصدري View Source) أو Ctrl+S (حفظ الكود)
-      if (ctrlOrMeta && ['U', 'S'].includes(key)) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerSecurityAlert('حماية الكود المصدري');
-        return false;
-      }
-    };
-
-    // منع سحب العناصر
-    const handleDragStart = (e) => {
-      e.preventDefault();
-    };
-
-    document.addEventListener('contextmenu', handleContextMenu);
-    document.addEventListener('keydown', handleKeyDown, true);
-    document.addEventListener('dragstart', handleDragStart);
-
-    return () => {
-      document.removeEventListener('contextmenu', handleContextMenu);
-      document.removeEventListener('keydown', handleKeyDown, true);
-      document.removeEventListener('dragstart', handleDragStart);
-    };
-  }, [sourceProtectionEnabled]);
-
-  // ==========================================
-  // 4. التحقق الذكي من التكرار أثناء الكتابة
-  // ==========================================
-  const duplicateCheck = useMemo(() => {
-    const cleanLedger = ledgerNo.trim();
-    const cleanEmpId = empId.trim();
-    const cleanName = empName.trim();
-
-    let duplicateLedger = null;
-    let duplicateEmpId = null;
-    let duplicateName = null;
-
-    for (const emp of employees) {
-      if (editingDocId && emp.id === editingDocId) continue;
-
-      if (cleanLedger && String(emp.ledgerNo).trim() === cleanLedger) {
-        duplicateLedger = emp;
-      }
-      if (cleanEmpId && String(emp.empId).trim().toLowerCase() === cleanEmpId.toLowerCase()) {
-        duplicateEmpId = emp;
-      }
-      if (cleanName && cleanName.length > 3 && String(emp.empName).trim() === cleanName) {
-        duplicateName = emp;
-      }
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
     }
-
-    return { duplicateLedger, duplicateEmpId, duplicateName };
-  }, [ledgerNo, empId, empName, employees, editingDocId]);
-
-  // ==========================================
-  // 5. دوال الإضافة والتعديل والحذف
-  // ==========================================
-  const resetForm = () => {
-    setLedgerNo('');
-    setEmpName('');
-    setEmpId('');
-    setNetSettlement('');
-    setNotes('');
-    setEditingDocId(null);
-  };
-
-  const handleFormSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-
-    const cleanLedger = ledgerNo.trim();
-    const cleanName = empName.trim();
-    const cleanId = empId.trim();
-    const parsedAmount = parseFloat(netSettlement);
-
-    if (!cleanLedger || !cleanName || !cleanId || isNaN(parsedAmount)) {
-      showNotification('يرجى ملء جميع الحقول الأساسية بشكل صحيح', 'error');
-      return;
+    input, textarea {
+      user-select: text;
+      -webkit-user-select: text;
     }
-
-    setIsSubmitting(true);
-    try {
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'settlement_records');
-      
-      if (editingDocId) {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'settlement_records', editingDocId);
-        await updateDoc(docRef, {
-          ledgerNo: cleanLedger,
-          empName: cleanName,
-          empId: cleanId,
-          netSettlement: parsedAmount,
-          notes: notes.trim(),
-          updatedAt: Date.now(),
-          updatedBy: user.uid
-        });
-        showNotification(`تم تحديث بيانات "${cleanName}" بنجاح`);
-        resetForm();
-      } else {
-        await addDoc(colRef, {
-          ledgerNo: cleanLedger,
-          empName: cleanName,
-          empId: cleanId,
-          netSettlement: parsedAmount,
-          notes: notes.trim(),
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          createdBy: user.uid
-        });
-        showNotification(`تمت إضافة الموظف "${cleanName}" إلى الشيت التفاعلي`);
-        resetForm();
-      }
-    } catch (error) {
-      console.error('Submit error:', error);
-      showNotification('حدث خطأ أثناء حفظ البيانات، يرجى المحاولة مرة أخرى', 'error');
-    } finally {
-      setIsSubmitting(false);
+    .live-pulse {
+      animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
-  };
-
-  const handleStartEdit = (emp) => {
-    setEditingDocId(emp.id);
-    setLedgerNo(String(emp.ledgerNo || ''));
-    setEmpName(String(emp.empName || ''));
-    setEmpId(String(emp.empId || ''));
-    setNetSettlement(String(emp.netSettlement ?? ''));
-    setNotes(String(emp.notes || ''));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const executeDelete = async () => {
-    if (!user || !confirmDeleteItem) return;
-
-    try {
-      if (confirmDeleteItem.isBulk) {
-        const idsToDelete = [...selectedIds];
-        await Promise.all(
-          idsToDelete.map((id) =>
-            deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settlement_records', id))
-          )
-        );
-        setSelectedIds([]);
-        showNotification(`تم مسح ${idsToDelete.length} سجل من الشيت بنجاح`);
-      } else {
-        await deleteDoc(
-          doc(db, 'artifacts', appId, 'public', 'data', 'settlement_records', confirmDeleteItem.id)
-        );
-        setSelectedIds((prev) => prev.filter((item) => item !== confirmDeleteItem.id));
-        if (editingDocId === confirmDeleteItem.id) resetForm();
-        showNotification(`تم مسح الموظف "${confirmDeleteItem.name}" من الشيت نهائياً`);
-      }
-    } catch (error) {
-      console.error('Delete error:', error);
-      showNotification('حدث خطأ أثناء الحذف', 'error');
-    } finally {
-      setConfirmDeleteItem(null);
+    @keyframes pulse-ring {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .5; transform: scale(1.12); }
     }
-  };
+    /* تخصيص شريط التمرير */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
 
-  // إضافة بيانات تجريبية سريعة للمعاينة
-  const handleAddSampleData = async () => {
-    if (!user) return;
-    const samples = [
-      { ledgerNo: '101', empName: 'أحمد محمود عبد العزيز', empId: 'EMP-4091', netSettlement: 14500.50, notes: 'تسوية نهاية الخدمة كاملة' },
-      { ledgerNo: '102', empName: 'سارة إبراهيم الكيلاني', empId: 'EMP-4092', netSettlement: 8250.00, notes: 'شامل رصيد الإجازات' },
-      { ledgerNo: '105', empName: 'محمد طارق الدمرداش', empId: 'EMP-4105', netSettlement: 21300.75, notes: 'مكافأة + تسوية مالية' },
-      { ledgerNo: '108', empName: 'نهى عبد الرحمن فؤاد', empId: 'EMP-4118', netSettlement: 6400.00, notes: 'تم المراجعة' },
-    ];
+  <!-- إشعار الحماية والتنبيهات (Toast) -->
+  <div id="toastContainer" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
-    try {
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'settlement_records');
-      await Promise.all(
-        samples.map((s) =>
-          addDoc(colRef, {
-            ...s,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            createdBy: user.uid
-          })
-        )
-      );
-      showNotification('تمت إضافة 4 سجلات نموذجية للتجربة');
-    } catch (e) {
-      showNotification('تعذر إضافة البيانات التجريبية', 'error');
-    }
-  };
-
-  // ==========================================
-  // 6. الفلترة والبحث الفوري والترتيب
-  // ==========================================
-  const filteredAndSortedEmployees = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-
-    const filtered = employees.filter((emp) => {
-      if (!q) return true;
-      const nameStr = String(emp.empName || '').toLowerCase();
-      const idStr = String(emp.empId || '').toLowerCase();
-      const ledgerStr = String(emp.ledgerNo || '').toLowerCase();
-      const notesStr = String(emp.notes || '').toLowerCase();
-
-      if (searchField === 'name') return nameStr.includes(q);
-      if (searchField === 'empId') return idStr.includes(q);
-      if (searchField === 'ledgerNo') return ledgerStr.includes(q);
-
-      return (
-        nameStr.includes(q) ||
-        idStr.includes(q) ||
-        ledgerStr.includes(q) ||
-        notesStr.includes(q)
-      );
-    });
-
-    return filtered.sort((a, b) => {
-      if (sortBy === 'ledgerAsc') {
-        return String(a.ledgerNo).localeCompare(String(b.ledgerNo), undefined, { numeric: true });
-      }
-      if (sortBy === 'nameAsc') {
-        return String(a.empName).localeCompare(String(b.empName), 'ar');
-      }
-      if (sortBy === 'amountDesc') {
-        return (Number(b.netSettlement) || 0) - (Number(a.netSettlement) || 0);
-      }
-      if (sortBy === 'amountAsc') {
-        return (Number(a.netSettlement) || 0) - (Number(b.netSettlement) || 0);
-      }
-      // Default: createdAtDesc
-      return (b.createdAt || 0) - (a.createdAt || 0);
-    });
-  }, [employees, searchQuery, searchField, sortBy]);
-
-  // إحصائيات حية
-  const stats = useMemo(() => {
-    const totalCount = employees.length;
-    const totalSettlement = employees.reduce((acc, cur) => acc + (Number(cur.netSettlement) || 0), 0);
-    const filteredCount = filteredAndSortedEmployees.length;
-    const filteredSettlement = filteredAndSortedEmployees.reduce(
-      (acc, cur) => acc + (Number(cur.netSettlement) || 0),
-      0
-    );
-
-    return { totalCount, totalSettlement, filteredCount, filteredSettlement };
-  }, [employees, filteredAndSortedEmployees]);
-
-  // ==========================================
-  // 7. التصدير والاستيراد من وإلى Excel (CSV UTF-8 BOM)
-  // ==========================================
-  const handleExportExcelCSV = () => {
-    if (filteredAndSortedEmployees.length === 0) {
-      showNotification('لا توجد بيانات لتصديرها حالياً', 'error');
-      return;
-    }
-
-    // إضافة BOM لضمان فتح الملف باللغة العربية السليمة في برنامج Microsoft Excel
-    const BOM = '\uFEFF';
-    const headers = ['رقم الموظف بالدفتر', 'اسم الموظف', 'ID الموظف', 'صافي التسوية', 'ملاحظات'];
-    
-    const rows = filteredAndSortedEmployees.map((emp) => [
-      `"${String(emp.ledgerNo || '').replace(/"/g, '""')}"`,
-      `"${String(emp.empName || '').replace(/"/g, '""')}"`,
-      `"${String(emp.empId || '').replace(/"/g, '""')}"`,
-      Number(emp.netSettlement || 0).toFixed(2),
-      `"${String(emp.notes || '').replace(/"/g, '""')}"`
-    ]);
-
-    // تضمين توقيع حقوق الملكية باسم نورهان صلاح في نهاية شيت الإكسل المصدّر
-    const copyrightRow = [
-      `"جميع الحقوق محفوظة © ${new Date().getFullYear()}"`,
-      `"تصميم وتطوير: ${OWNER_NAME}"`,
-      `"${PORTFOLIO_URL}"`,
-      `""`,
-      `"نظام محمي"`
-    ];
-
-    const csvContent =
-      BOM +
-      [headers.join(','), ...rows.map((r) => r.join(',')), '', copyrightRow.join(',')].join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.href = url;
-    const dateStr = new Date().toISOString().slice(0, 10);
-    link.setAttribute('download', `شيت_تسويات_الموظفين_${dateStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    showNotification(`تم تحميل شيت الإكسل موثقاً بحقوق الملكية لـ "${OWNER_NAME}"`);
-  };
-
-  // تحليل النص الملصق من إكسل أو المرفوع من ملف CSV
-  const processImportedText = async (rawText) => {
-    if (!user || !rawText.trim()) return;
-    setIsImporting(true);
-
-    try {
-      const lines = rawText
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      const recordsToInsert = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        // الفصل بواسطة Tab (نسخ مباشر من إكسل) أو فاصلة , أو فاصلة منقوطة ;
-        const parts = line.includes('\t')
-          ? line.split('\t')
-          : line.includes(';')
-          ? line.split(';')
-          : line.split(',');
-
-        const cleaned = parts.map((p) => p.replace(/^["']|["']$/g, '').trim());
-        if (cleaned.length < 3) continue;
-
-        // تخطي سطر العناوين إن وجد
-        if (
-          i === 0 &&
-          (cleaned[0].includes('رقم') ||
-            cleaned[1].includes('اسم') ||
-            cleaned[2].toLowerCase().includes('id'))
-        ) {
-          continue;
-        }
-
-        const lNo = cleaned[0] || '-';
-        const eName = cleaned[1] || 'بدون اسم';
-        const eId = cleaned[2] || '-';
-        const rawAmount = cleaned[3] ? cleaned[3].replace(/[^0-9.-]/g, '') : '0';
-        const amount = parseFloat(rawAmount) || 0;
-        const note = cleaned[4] || '';
-
-        recordsToInsert.push({
-          ledgerNo: lNo,
-          empName: eName,
-          empId: eId,
-          netSettlement: amount,
-          notes: note
-        });
-      }
-
-      if (recordsToInsert.length === 0) {
-        showNotification('لم يتم العثور على صفوف صالحة للاستيراد، تأكد من ترتيب الأعمدة', 'error');
-        setIsImporting(false);
-        return;
-      }
-
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'settlement_records');
-      await Promise.all(
-        recordsToInsert.map((rec) =>
-          addDoc(colRef, {
-            ...rec,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            createdBy: user.uid
-          })
-        )
-      );
-
-      showNotification(`تم استيراد ${recordsToInsert.length} موظف إلى الشيت التفاعلي بنجاح!`);
-      setPasteData('');
-      setShowImportModal(false);
-    } catch (err) {
-      console.error('Import error:', err);
-      showNotification('حدث خطأ أثناء استيراد البيانات', 'error');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result;
-      if (typeof content === 'string') {
-        setPasteData(content);
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-  };
-
-  // تنسيق الأرقام المالية
-  const formatCurrency = (val) => {
-    const num = Number(val);
-    if (isNaN(num)) return '0.00';
-    return num.toLocaleString('ar-EG', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  };
-
-  // التحديد الجماعي
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredAndSortedEmployees.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredAndSortedEmployees.map((e) => e.id));
-    }
-  };
-
-  const toggleSelectRow = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  // هل النموذج يحتوي على بيانات حالياً للمعاينة الحية؟
-  const hasLiveInput = Boolean(
-    ledgerNo.trim() || empName.trim() || empId.trim() || netSettlement.trim() || notes.trim()
-  );
-
-  return (
-    <div
-      dir="rtl"
-      onContextMenu={(e) => {
-        if (sourceProtectionEnabled) e.preventDefault();
-      }}
-      className={`min-h-screen bg-slate-950 text-slate-100 font-sans pb-16 selection:bg-emerald-500 selection:text-white flex flex-col justify-between ${
-        sourceProtectionEnabled ? 'select-none' : ''
-      }`}
-    >
-      {/* استيراد خط Cairo العربي ليبدو التصميم عصرياً واحترافياً */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap');
-        body, * {
-          font-family: 'Cairo', sans-serif;
-        }
-        input, textarea, select {
-          user-select: text !important;
-          -webkit-user-select: text !important;
-        }
-        @keyframes pulse-border {
-          0%, 100% { border-color: rgba(16, 185, 129, 0.8); }
-          50% { border-color: rgba(16, 185, 129, 0.25); }
-        }
-        .live-row-glow {
-          animation: pulse-border 2s infinite;
-        }
-      `}</style>
-
-      {/* إشعار عائم (Toast Notification) */}
-      {toast && (
-        <div className="fixed bottom-6 left-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 bg-slate-900/95 border-slate-700 text-white">
-          {toast.type === 'error' ? (
-            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-          ) : (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          )}
-          <span className="text-sm font-semibold">{toast.message}</span>
-          <button
-            onClick={() => setToast(null)}
-            className="text-slate-400 hover:text-white p-1 rounded-lg"
-          >
-            <X className="w-4 h-4" />
-          </button>
+  <!-- الهيدر الرئيسي -->
+  <header class="bg-gradient-to-l from-emerald-900 via-emerald-800 to-teal-900 text-white shadow-lg border-b border-emerald-700/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shadow-inner">
+          <i class="fa-solid fa-file-excel text-2xl text-emerald-300"></i>
         </div>
-      )}
-
-      {/* ==========================================
-          الشريط العلوي (Header) ومؤشر التزامن اللحظي
-      ========================================== */}
-      <header className="sticky top-0 z-30 bg-slate-900/85 backdrop-blur-xl border-b border-slate-800/80 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <FileSpreadsheet className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
-                منظومة شيت التسويات التفاعلي
-                <span className="text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-                  تعاوني مباشر
-                </span>
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-                إدخال، مراجعة، وبحث فوري لحذف أو تعديل تسويات الموظفين في الوقت الفعلي
-              </p>
-            </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl sm:text-2xl font-extrabold tracking-wide">منظومة شيت التسويات التفاعلي</h1>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 live-pulse"></span>
+              مباشر (Live)
+            </span>
           </div>
-
-          {/* حالة الاتصال وأزرار الإكسل */}
-          <div className="flex items-center flex-wrap gap-2.5">
-            {/* مؤشر المزامنة الحية */}
-            <div
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border ${
-                syncError
-                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                  : isSyncing
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-              }`}
-            >
-              <span className="relative flex h-2.5 w-2.5">
-                {!syncError && (
-                  <span
-                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                      isSyncing ? 'bg-amber-400' : 'bg-emerald-400'
-                    }`}
-                  ></span>
-                )}
-                <span
-                  className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                    syncError ? 'bg-rose-500' : isSyncing ? 'bg-amber-500' : 'bg-emerald-500'
-                  }`}
-                ></span>
-              </span>
-              <span>
-                {syncError
-                  ? syncError
-                  : isSyncing
-                  ? 'جاري المزامنة اللحظية...'
-                  : 'متصل ومحدث لحظياً لكافة المستخدمين'}
-              </span>
-            </div>
-
-            {/* زر استيراد من إكسل */}
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition shadow-sm cursor-pointer"
-            >
-              <Upload className="w-4 h-4 text-teal-400" />
-              <span>استيراد شيت إكسل</span>
-            </button>
-
-            {/* زر تصدير إلى إكسل */}
-            <button
-              onClick={handleExportExcelCSV}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md shadow-emerald-600/20 cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-              <span>تصدير Excel</span>
-            </button>
-          </div>
+          <p class="text-emerald-200/80 text-xs sm:text-sm mt-0.5">إدارة حية لبيانات الموظفين وصافي التسويات مع بحث وحذف فوري وتكامل مع Excel</p>
         </div>
-      </header>
+      </div>
 
-      {/* ==========================================
-          المحتوى الرئيسي
-      ========================================== */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+      <!-- أزرار التحكم السريعة في الهيدر -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <button onclick="openImportModal()" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-bold transition flex items-center gap-2 border border-white/15 shadow-sm">
+          <i class="fa-solid fa-file-import text-emerald-300"></i>
+          <span>استيراد شيت إكسل</span>
+        </button>
+        <button onclick="exportToExcel()" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs sm:text-sm font-extrabold transition flex items-center gap-2 shadow-md">
+          <i class="fa-solid fa-file-export"></i>
+          <span>تصدير Excel (CSV)</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 space-y-6">
+
+    <!-- بطاقات الإحصائيات السريعة -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-bold text-slate-400">إجمالي الموظفين المسجلين</p>
+          <p id="statTotalCount" class="text-2xl font-extrabold text-slate-800 mt-1">0</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-users"></i>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-bold text-slate-400">إجمالي صافي التسويات</p>
+          <p id="statTotalAmount" class="text-2xl font-extrabold text-emerald-600 mt-1">0.00 ج.م</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-sack-dollar"></i>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-bold text-slate-400">متوسط التسوية للموظف</p>
+          <p id="statAvgAmount" class="text-2xl font-extrabold text-indigo-600 mt-1">0.00 ج.م</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-chart-line"></i>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-bold text-slate-400">حالة الحماية والمزامنة</p>
+          <p class="text-sm font-extrabold text-teal-700 mt-1 flex items-center gap-1.5">
+            <i class="fa-solid fa-shield-halved text-emerald-600"></i>
+            <span>مؤمّن ومتزامن لحظياً</span>
+          </p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+      </div>
+    </section>
+
+    <!-- الشبكة الرئيسية: الفورم على اليمين + الجدول والبحث على اليسار -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- العمود الأيمن: يوزر فورم الإدخال + بطاقة المعاينة الحية -->
+      <div class="lg:col-span-4 space-y-5">
         
-        {/* 1. بطاقات الإحصائيات الفورية */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
-            <div>
-              <p className="text-xs font-semibold text-slate-400">إجمالي الموظفين بالشيت</p>
-              <p className="text-2xl font-extrabold text-white mt-1">{stats.totalCount}</p>
-              <span className="text-[11px] text-emerald-400 font-medium">سجل محفوظ ومزامن</span>
+        <!-- بطاقة الفورم -->
+        <div class="bg-white rounded-2xl shadow-md border border-slate-200/90 overflow-hidden">
+          <div class="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-user-plus text-emerald-400"></i>
+              <h2 id="formTitle" class="font-bold text-sm sm:text-base">إدخال بيانات موظف جديد</h2>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-              <Users className="w-6 h-6" />
-            </div>
+            <span id="editModeBadge" class="hidden px-2 py-0.5 text-xs rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/30 font-bold">
+              وضع التعديل
+            </span>
           </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+          <form id="employeeForm" onsubmit="handleFormSubmit(event)" class="p-5 space-y-4">
+            <input type="hidden" id="editRecordId" value="" />
+
+            <!-- رقم الموظف في الدفتر -->
             <div>
-              <p className="text-xs font-semibold text-slate-400">إجمالي صافي التسويات</p>
-              <p className="text-2xl font-extrabold text-emerald-400 mt-1">
-                {formatCurrency(stats.totalSettlement)} <span className="text-xs font-normal text-slate-400">ج.م</span>
+              <label class="block text-xs font-bold text-slate-700 mb-1">
+                رقم الموظف في الدفتر <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                  <i class="fa-solid fa-book-bookmark"></i>
+                </span>
+                <input
+                  type="text"
+                  id="ledgerNo"
+                  required
+                  placeholder="مثال: 105 أو د-204"
+                  oninput="updateLivePreview()"
+                  class="w-full pr-9 pl-3 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-semibold transition"
+                />
+              </div>
+              <p id="ledgerWarning" class="hidden text-xs text-amber-600 font-bold mt-1">
+                <i class="fa-solid fa-triangle-exclamation ml-1"></i> رقم الدفتر مسجل لموظف آخر!
               </p>
-              <span className="text-[11px] text-slate-400 font-medium">مجموع كافة المستحقات</span>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <DollarSign className="w-6 h-6" />
-            </div>
-          </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+            <!-- اسم الموظف -->
             <div>
-              <p className="text-xs font-semibold text-slate-400">نتائج البحث المعروضة</p>
-              <p className="text-2xl font-extrabold text-amber-400 mt-1">
-                {stats.filteredCount} <span className="text-xs font-normal text-slate-400">من {stats.totalCount}</span>
-              </p>
-              <span className="text-[11px] text-slate-400 font-medium">
-                {searchQuery ? `بحث نشط: "${searchQuery}"` : 'يتم عرض كامل الشيت'}
-              </span>
+              <label class="block text-xs font-bold text-slate-700 mb-1">
+                اسم الموظف بالكامل <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                  <i class="fa-solid fa-user"></i>
+                </span>
+                <input
+                  type="text"
+                  id="empName"
+                  required
+                  placeholder="اكتب اسم الموظف الثلاثي أو الرباعي..."
+                  oninput="updateLivePreview()"
+                  class="w-full pr-9 pl-3 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-semibold transition"
+                />
+              </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Filter className="w-6 h-6" />
-            </div>
-          </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+            <!-- الـ ID الخاص بالموظف -->
             <div>
-              <p className="text-xs font-semibold text-slate-400">صافي تسويات نتائج البحث</p>
-              <p className="text-2xl font-extrabold text-teal-400 mt-1">
-                {formatCurrency(stats.filteredSettlement)} <span className="text-xs font-normal text-slate-400">ج.م</span>
+              <label class="block text-xs font-bold text-slate-700 mb-1">
+                الـ ID الخاص بالموظف <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                  <i class="fa-solid fa-id-card"></i>
+                </span>
+                <input
+                  type="text"
+                  id="empId"
+                  required
+                  placeholder="مثال: EMP-9021 أو 2980115"
+                  oninput="updateLivePreview()"
+                  class="w-full pr-9 pl-3 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-mono font-semibold transition"
+                />
+              </div>
+              <p id="idWarning" class="hidden text-xs text-rose-600 font-bold mt-1">
+                <i class="fa-solid fa-circle-exclamation ml-1"></i> تنبيه: هذا الـ ID موجود بالفعل في الشيت!
               </p>
-              <span className="text-[11px] text-slate-400 font-medium">يتحدث تلقائياً مع الفلتر</span>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-          </div>
-        </section>
-
-        {/* 2. القسم الرئيسي: الفورم التفاعلي على اليمين + المعاينة الحية والجدول على اليسار */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
-          {/* ==========================================
-              عمود نموذج الإدخال والمعاينة الحية (4 أعمدة)
-          ========================================== */}
-          <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-24">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
-              {/* شريط علوي ملون حسب حالة الإضافة أو التعديل */}
-              <div
-                className={`absolute top-0 right-0 left-0 h-1.5 ${
-                  editingDocId
-                    ? 'bg-gradient-to-l from-amber-500 to-orange-500'
-                    : 'bg-gradient-to-l from-emerald-500 to-teal-500'
-                }`}
-              />
-
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                      editingDocId
-                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                        : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                    }`}
-                  >
-                    {editingDocId ? <Edit3 className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
-                  </div>
-                  <div>
-                    <h2 className="text-base sm:text-lg font-bold text-white">
-                      {editingDocId ? 'تعديل بيانات موظف' : 'إدخال تسوية موظف جديد'}
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      تظهر البيانات مباشرة في المعاينة الحية أثناء الكتابة
-                    </p>
-                  </div>
-                </div>
-
-                {editingDocId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 px-2.5 py-1.5 rounded-lg border border-rose-500/20"
-                  >
-                    إلغاء التعديل
-                  </button>
-                )}
-              </div>
-
-              <form onSubmit={handleFormSubmit} className="space-y-4">
-                {/* الحقل 1: رقم الموظف في الدفتر */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Hash className="w-3.5 h-3.5 text-emerald-400" />
-                      رقم الموظف في الدفتر <span className="text-rose-400">*</span>
-                    </span>
-                    {duplicateCheck.duplicateLedger && (
-                      <span className="text-[11px] text-amber-400 font-semibold flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> رقم الدفتر مسجل مسبقاً
-                      </span>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={ledgerNo}
-                    onChange={(e) => setLedgerNo(e.target.value)}
-                    placeholder="مثال: 105 أو د-24"
-                    className={`w-full bg-slate-950 border ${
-                      duplicateCheck.duplicateLedger ? 'border-amber-500/60' : 'border-slate-700/80'
-                    } focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition`}
-                  />
-                </div>
-
-                {/* الحقل 2: اسم الموظف */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-emerald-400" />
-                      اسم الموظف رباعي <span className="text-rose-400">*</span>
-                    </span>
-                    {duplicateCheck.duplicateName && (
-                      <span className="text-[11px] text-amber-400 font-semibold flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> الاسم موجود بالفعل
-                      </span>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={empName}
-                    onChange={(e) => setEmpName(e.target.value)}
-                    placeholder="اكتب اسم الموظف بالكامل..."
-                    className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition"
-                  />
-                </div>
-
-                {/* الحقل 3: الـ ID الخاص بالموظف */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <IdCard className="w-3.5 h-3.5 text-emerald-400" />
-                      الـ ID الخاص بالموظف (الرقم التعريفي) <span className="text-rose-400">*</span>
-                    </span>
-                    {duplicateCheck.duplicateEmpId && (
-                      <span className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> الـ ID مكرر!
-                      </span>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={empId}
-                    onChange={(e) => setEmpId(e.target.value)}
-                    placeholder="مثال: EMP-2049 أو 298011..."
-                    className={`w-full bg-slate-950 border ${
-                      duplicateCheck.duplicateEmpId ? 'border-rose-500/70' : 'border-slate-700/80'
-                    } focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition font-mono`}
-                  />
-                  {duplicateCheck.duplicateEmpId && (
-                    <p className="text-[11px] text-rose-400 mt-1">
-                      تنبيه: هذا الـ ID مسجل باسم ({duplicateCheck.duplicateEmpId.empName}) برقم دفتر ({duplicateCheck.duplicateEmpId.ledgerNo}).
-                    </p>
-                  )}
-                </div>
-
-                {/* الحقل 4: صافي التسوية */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                    صافي التسوية المالية <span className="text-rose-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      value={netSettlement}
-                      onChange={(e) => setNetSettlement(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl pl-12 pr-3.5 py-2.5 text-sm font-bold text-emerald-400 placeholder-slate-600 outline-none transition"
-                    />
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      ج.م
-                    </span>
-                  </div>
-                </div>
-
-                {/* الحقل 5: ملاحظات إضافية (اختياري) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    ملاحظات التسوية (اختياري)
-                  </label>
-                  <input
-                    type="text"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="أية ملاحظات حول الصرف أو المراجعة..."
-                    className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500 outline-none transition"
-                  />
-                </div>
-
-                {/* بطاقة المعاينة الحية أثناء الكتابة (Live Form Preview) */}
-                <div className="pt-2">
-                  <div className="rounded-2xl bg-slate-950/90 border border-emerald-500/30 p-3.5 relative overflow-hidden">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
-                        <Eye className="w-3.5 h-3.5 animate-pulse" />
-                        معاينة حية للسجل قبل الحفظ
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                        تفاعلي مباشر
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-900/90 p-2.5 rounded-xl border border-slate-800/80">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">رقم الدفتر:</span>
-                        <span className="font-bold text-amber-300">{ledgerNo.trim() || '---'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">الـ ID التعريفي:</span>
-                        <span className="font-mono font-bold text-indigo-300">{empId.trim() || '---'}</span>
-                      </div>
-                      <div className="col-span-2 border-t border-slate-800/80 pt-1.5 mt-0.5">
-                        <span className="text-slate-400 block text-[10px]">اسم الموظف:</span>
-                        <span className="font-bold text-white text-sm">{empName.trim() || 'يظهر الاسم هنا فور كتابته...'}</span>
-                      </div>
-                      <div className="col-span-2 border-t border-slate-800/80 pt-1.5 flex items-center justify-between">
-                        <span className="text-slate-400 text-[10px]">صافي التسوية:</span>
-                        <span className="font-extrabold text-emerald-400 text-sm">
-                          {netSettlement ? `${formatCurrency(netSettlement)} ج.م` : '0.00 ج.م'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* زر الحفظ والإضافة */}
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className={`w-full py-3 px-4 rounded-xl font-bold text-sm text-white shadow-lg flex items-center justify-center gap-2 transition cursor-pointer ${
-                    editingDocId
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 shadow-amber-500/20'
-                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 shadow-emerald-500/20'
-                  } disabled:opacity-50`}
-                >
-                  {isSubmitting ? (
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                  ) : editingDocId ? (
-                    <>
-                      <Check className="w-5 h-5" />
-                      <span>حفظ التعديلات في الشيت المشترك</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-5 h-5" />
-                      <span>إضافة الموظف للشيت التفاعلي</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-
-          {/* ==========================================
-              عمود شيت الإكسل التفاعلي والبحث والحذف (8 أعمدة)
-          ========================================== */}
-          <div className="lg:col-span-8 space-y-4">
-            
-            {/* شريط البحث السريع والفلاتر لحذف أو تعديل موظف */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                {/* مربع البحث الفوري */}
-                <div className="relative flex-1">
-                  <Search className="w-5 h-5 text-emerald-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="ابحث فوراً باسم الموظف، أو الـ ID، أو رقم الدفتر لمسحه أو تعديله..."
-                    className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-2xl pr-11 pl-10 py-3 text-sm text-white placeholder-slate-400 outline-none transition"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white bg-slate-800 p-1 rounded-lg"
-                      title="مسح البحث"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* اختيار نطاق البحث */}
-                <div className="flex items-center gap-2">
-                  <select
-                    value={searchField}
-                    onChange={(e) => setSearchField(e.target.value)}
-                    className="bg-slate-950 border border-slate-700/80 text-slate-200 text-xs font-bold rounded-xl px-3 py-3 outline-none focus:border-emerald-500"
-                  >
-                    <option value="all">بحث في كل الأعمدة</option>
-                    <option value="name">بحث باسم الموظف فقط</option>
-                    <option value="empId">بحث بـ ID الموظف فقط</option>
-                    <option value="ledgerNo">بحث برقم الدفتر فقط</option>
-                  </select>
-
-                  {/* ترتيب الشيت */}
-                  <div className="relative flex items-center">
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
-                      className="bg-slate-950 border border-slate-700/80 text-slate-200 text-xs font-bold rounded-xl px-3 py-3 outline-none focus:border-emerald-500"
-                    >
-                      <option value="createdAtDesc">الأحدث إضافة</option>
-                      <option value="ledgerAsc">ترتيب برقم الدفتر</option>
-                      <option value="nameAsc">ترتيب أبجدي بالاسم</option>
-                      <option value="amountDesc">الأعلى تسوية</option>
-                      <option value="amountAsc">الأقل تسوية</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* شريط الإجراءات الجماعية عند تحديد موظفين */}
-              {selectedIds.length > 0 && (
-                <div className="flex items-center justify-between bg-rose-500/10 border border-rose-500/30 rounded-2xl px-4 py-2.5 animate-fadeIn">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-rose-300">
-                    <CheckCircle2 className="w-4 h-4 text-rose-400" />
-                    <span>تم تحديد {selectedIds.length} موظف من الشيت</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSelectedIds([])}
-                      className="text-xs font-semibold text-slate-300 hover:text-white px-2.5 py-1 rounded-lg"
-                    >
-                      إلغاء التحديد
-                    </button>
-                    <button
-                      onClick={() =>
-                        setConfirmDeleteItem({
-                          id: null,
-                          name: `${selectedIds.length} موظفين محددين`,
-                          isBulk: true
-                        })
-                      }
-                      className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-md transition cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>مسح المحددين من الشيت</span>
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* جدول شيت الإكسل التفاعلي */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900/60">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-                  <h3 className="font-bold text-white text-sm sm:text-base">
-                    شيت الإكسل التفاعلي المشترك
-                  </h3>
-                  <span className="text-xs bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full font-semibold">
-                    {filteredAndSortedEmployees.length} سجل
-                  </span>
-                </div>
-
-                {employees.length === 0 && (
-                  <button
-                    onClick={handleAddSampleData}
-                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>إضافة بيانات تجريبية للمعاينة</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="bg-slate-950/80 text-slate-400 text-xs uppercase border-b border-slate-800">
-                      <th className="py-3.5 px-4 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={
-                            filteredAndSortedEmployees.length > 0 &&
-                            selectedIds.length === filteredAndSortedEmployees.length
-                          }
-                          onChange={toggleSelectAll}
-                          className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
-                        />
-                      </th>
-                      <th className="py-3.5 px-3 font-bold">رقم الدفتر</th>
-                      <th className="py-3.5 px-4 font-bold">اسم الموظف</th>
-                      <th className="py-3.5 px-4 font-bold">الـ ID التعريفي</th>
-                      <th className="py-3.5 px-4 font-bold">صافي التسوية</th>
-                      <th className="py-3.5 px-4 font-bold">ملاحظات</th>
-                      <th className="py-3.5 px-4 font-bold text-center">إجراءات (تعديل / مسح)</th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-slate-800/70 text-sm">
-                    {/* صف المعاينة الحية داخل الجدول أثناء الكتابة! */}
-                    {hasLiveInput && !editingDocId && (
-                      <tr className="bg-emerald-950/30 border-2 border-dashed border-emerald-500/60 live-row-glow">
-                        <td className="py-3 px-4 text-center">
-                          <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                        </td>
-                        <td className="py-3 px-3 font-bold text-amber-300">
-                          {ledgerNo || '...'}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-white">
-                          <div className="flex items-center gap-2">
-                            <span>{empName || 'جاري كتابة الاسم...'}</span>
-                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-500/30">
-                              يكتب الآن...
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-mono text-xs text-indigo-300 font-bold">
-                          {empId || '...'}
-                        </td>
-                        <td className="py-3 px-4 font-extrabold text-emerald-400">
-                          {netSettlement ? `${formatCurrency(netSettlement)} ج.م` : '0.00 ج.م'}
-                        </td>
-                        <td className="py-3 px-4 text-xs text-slate-400">
-                          {notes || '-'}
-                        </td>
-                        <td className="py-3 px-4 text-center text-xs text-emerald-400 font-semibold">
-                          اضغط حفظ للإدراج
-                        </td>
-                      </tr>
-                    )}
-
-                    {/* عرض صفوف الموظفين الفعليين */}
-                    {filteredAndSortedEmployees.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-14 text-center text-slate-400">
-                          <div className="max-w-sm mx-auto space-y-3">
-                            <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-slate-400">
-                              <Search className="w-7 h-7" />
-                            </div>
-                            <p className="font-bold text-base text-slate-200">
-                              {searchQuery
-                                ? `لا يوجد موظف مطابق لـ "${searchQuery}"`
-                                : 'شيت التسويات فارغ حالياً'}
-                            </p>
-                            <p className="text-xs text-slate-400 leading-relaxed">
-                              {searchQuery
-                                ? 'تأكد من كتابة الاسم أو الـ ID أو رقم الدفتر بشكل صحيح، أو قم بمسح كلمة البحث لعرض كل الشيت.'
-                                : 'ابدأ بإدخال بيانات الموظفين من النموذج الجانبي أو قم باستيراد شيت الإكسل الخاص بك مباشرة.'}
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredAndSortedEmployees.map((emp) => {
-                        const isSelected = selectedIds.includes(emp.id);
-                        const isBeingEdited = editingDocId === emp.id;
-
-                        return (
-                          <tr
-                            key={emp.id}
-                            className={`transition-colors ${
-                              isBeingEdited
-                                ? 'bg-amber-500/15 border-r-4 border-amber-400'
-                                : isSelected
-                                ? 'bg-rose-500/10'
-                                : 'hover:bg-slate-800/50'
-                            }`}
-                          >
-                            <td className="py-3.5 px-4 text-center">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleSelectRow(emp.id)}
-                                className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
-                              />
-                            </td>
-
-                            {/* رقم الدفتر */}
-                            <td className="py-3.5 px-3 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-extrabold bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                                #{emp.ledgerNo}
-                              </span>
-                            </td>
-
-                            {/* اسم الموظف */}
-                            <td className="py-3.5 px-4 font-bold text-white">
-                              {emp.empName}
-                              {isBeingEdited && (
-                                <span className="mr-2 text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-md">
-                                  قيد التعديل...
-                                </span>
-                              )}
-                            </td>
-
-                            {/* ID الموظف */}
-                            <td className="py-3.5 px-4 whitespace-nowrap">
-                              <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                                {emp.empId}
-                              </span>
-                            </td>
-
-                            {/* صافي التسوية */}
-                            <td className="py-3.5 px-4 whitespace-nowrap font-extrabold text-emerald-400">
-                              {formatCurrency(emp.netSettlement)}{' '}
-                              <span className="text-[11px] font-normal text-slate-400">ج.م</span>
-                            </td>
-
-                            {/* ملاحظات */}
-                            <td className="py-3.5 px-4 text-xs text-slate-300 max-w-[160px] truncate">
-                              {emp.notes || <span className="text-slate-600">-</span>}
-                            </td>
-
-                            {/* أزرار التعديل والمسح الفوري */}
-                            <td className="py-3.5 px-4 whitespace-nowrap text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() => handleStartEdit(emp)}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-amber-500/20 text-slate-200 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 transition cursor-pointer"
-                                  title="تعديل هذا السجل"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                  <span>تعديل</span>
-                                </button>
-
-                                <button
-                                  onClick={() =>
-                                    setConfirmDeleteItem({
-                                      id: emp.id,
-                                      name: emp.empName,
-                                      ledger: emp.ledgerNo,
-                                      isBulk: false
-                                    })
-                                  }
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/20 transition cursor-pointer"
-                                  title="مسح من شيت الإكسل"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>مسح</span>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* ==========================================
-          نافذة تأكيد المسح (Modal) بدلاً من alert/confirm
-      ========================================== */}
-      {confirmDeleteItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-fadeIn">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-extrabold text-white">تأكيد مسح السجل من الشيت</h3>
-                <p className="text-xs text-slate-400">
-                  سيتم الحذف فوراً لدى جميع المستخدمين المتصلين بالشيت
-                </p>
+            <!-- صافي التسوية -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">
+                صافي التسوية (ج.م) <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                  <i class="fa-solid fa-coins"></i>
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  id="netSettlement"
+                  required
+                  placeholder="0.00"
+                  oninput="updateLivePreview()"
+                  class="w-full pr-9 pl-12 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-extrabold text-emerald-700 transition"
+                />
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-bold text-slate-400">
+                  ج.م
+                </span>
               </div>
             </div>
 
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm text-slate-200 leading-relaxed">
-              هل أنتِ متأكدة من رغبتك في مسح{' '}
-              <span className="font-extrabold text-rose-400">"{confirmDeleteItem.name}"</span>
-              {confirmDeleteItem.ledger ? ` (دفتر رقم #${confirmDeleteItem.ledger})` : ''} نهائياً من شيت التسويات؟
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <!-- أزرار الحفظ والإلغاء -->
+            <div class="pt-2 flex items-center gap-2">
               <button
-                onClick={() => setConfirmDeleteItem(null)}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
+                type="submit"
+                id="submitBtn"
+                class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 px-4 rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 text-sm"
               >
-                تراجع وإلغاء
+                <i class="fa-solid fa-plus-circle"></i>
+                <span>إضافة للشيت الآن</span>
               </button>
               <button
-                onClick={executeDelete}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20 flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>نعم، امسح الآن</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==========================================
-          نافذة استيراد أو لصق بيانات من شيت Excel
-      ========================================== */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
-                  <ClipboardPaste className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-extrabold text-white">
-                    استيراد بيانات من شيت إكسل (نسخ ولصق أو ملف CSV)
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    انسخي الصفوف من ملف الإكسل لديكِ والصقيها هنا مباشرة ليتم إضافتها للشيت التفاعلي
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-xl bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300 space-y-1.5">
-                <p className="font-bold text-emerald-400">ترتيب الأعمدة المطلوب عند النسخ من الإكسل:</p>
-                <p className="font-mono text-[11px] bg-slate-900 p-2 rounded-lg border border-slate-800 text-slate-200">
-                  رقم الدفتر &nbsp;&nbsp;|&nbsp;&nbsp; اسم الموظف &nbsp;&nbsp;|&nbsp;&nbsp; ID الموظف &nbsp;&nbsp;|&nbsp;&nbsp; صافي التسوية &nbsp;&nbsp;|&nbsp;&nbsp; ملاحظات (اختياري)
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-300">
-                  الصقي خلايا الإكسل هنا أو ارفعي ملف CSV:
-                </label>
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv,.txt"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-xs font-bold text-teal-400 hover:text-teal-300 bg-teal-500/10 border border-teal-500/20 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>اختيار ملف CSV من الجهاز</span>
-                  </button>
-                </div>
-              </div>
-
-              <textarea
-                rows={6}
-                value={pasteData}
-                onChange={(e) => setPasteData(e.target.value)}
-                placeholder={`مثال:\n101\tأحمد محمود علي\tEMP-901\t12500\tتمت المراجعة\n102\tمنى سعيد حسن\tEMP-902\t9800\tصرف فوري`}
-                className="w-full bg-slate-950 border border-slate-700 rounded-2xl p-3.5 text-xs text-white font-mono placeholder-slate-500 outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
+                type="button"
+                id="cancelEditBtn"
+                onclick="resetForm()"
+                class="hidden px-4 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-sm transition"
               >
                 إلغاء
               </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- بطاقة المعاينة الحية أثناء الكتابة (Live Preview Card) -->
+        <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white rounded-2xl p-5 shadow-md border border-emerald-500/30 relative overflow-hidden">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 live-pulse"></span>
+              معاينة حية أثناء الإدخال (Live Preview)
+            </span>
+            <span id="previewStatusBadge" class="text-[11px] px-2 py-0.5 rounded bg-white/10 text-slate-300">
+              في انتظار الكتابة...
+            </span>
+          </div>
+
+          <div class="space-y-2.5 text-sm bg-black/25 p-3.5 rounded-xl border border-white/10">
+            <div class="flex justify-between items-center border-b border-white/10 pb-2">
+              <span class="text-slate-400 text-xs">رقم الدفتر:</span>
+              <span id="prevLedger" class="font-bold text-amber-300 font-mono">—</span>
+            </div>
+            <div class="flex justify-between items-center border-b border-white/10 pb-2">
+              <span class="text-slate-400 text-xs">اسم الموظف:</span>
+              <span id="prevName" class="font-bold text-white truncate max-w-[180px]">—</span>
+            </div>
+            <div class="flex justify-between items-center border-b border-white/10 pb-2">
+              <span class="text-slate-400 text-xs">الـ ID الوظيفي:</span>
+              <span id="prevId" class="font-mono text-xs bg-white/10 px-2 py-0.5 rounded text-cyan-300">—</span>
+            </div>
+            <div class="flex justify-between items-center pt-1">
+              <span class="text-slate-400 text-xs">صافي التسوية:</span>
+              <span id="prevSettlement" class="font-extrabold text-base text-emerald-400">0.00 ج.م</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- العمود الأيسر: البحث الفوري + شيت الإكسل التفاعلي -->
+      <div class="lg:col-span-8 space-y-4">
+
+        <!-- شريط البحث الفوري وأدوات الحذف -->
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/90 space-y-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <!-- مربع البحث -->
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-emerald-600">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </span>
+              <input
+                type="text"
+                id="searchInput"
+                oninput="renderTable()"
+                placeholder="ابحث فوراً باسم الموظف، أو الـ ID، أو رقم الدفتر لمسحه أو تعديله..."
+                class="w-full pr-10 pl-9 py-2.5 rounded-xl bg-slate-50 border border-slate-300 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-semibold transition"
+              />
               <button
-                disabled={isImporting || !pasteData.trim()}
-                onClick={() => processImportedText(pasteData)}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition cursor-pointer"
+                id="clearSearchBtn"
+                onclick="clearSearch()"
+                class="hidden absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 hover:text-rose-500"
+                title="مسح البحث"
               >
-                {isImporting ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4" />
-                )}
-                <span>إدراج البيانات في الشيت الآن</span>
+                <i class="fa-solid fa-circle-xmark"></i>
+              </button>
+            </div>
+
+            <!-- أزرار الحذف الجماعي وإعادة الضبط -->
+            <div class="flex items-center gap-2">
+              <button
+                id="deleteSelectedBtn"
+                onclick="deleteSelectedRecords()"
+                class="hidden px-3.5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold transition flex items-center gap-1.5 shadow-sm"
+              >
+                <i class="fa-solid fa-trash-can"></i>
+                <span>حذف المحدد (<span id="selectedCount">0</span>)</span>
+              </button>
+
+              <button
+                onclick="resetDemoData()"
+                class="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition flex items-center gap-1.5"
+                title="استعادة البيانات التجريبية"
+              >
+                <i class="fa-solid fa-rotate-right"></i>
+                <span class="hidden sm:inline">بيانات تجريبية</span>
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ==========================================
-          الفوتر الرسمي الموثق بحقوق الملكية ورابط البورتفوليو (Copyright Footer)
-      ========================================== */}
-      <footer className="mt-12 border-t border-slate-800/80 bg-slate-900/90 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500/20 to-emerald-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <Copyright className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm font-bold text-slate-200 flex items-center flex-wrap gap-2">
-                <span>جميع الحقوق محفوظة © {new Date().getFullYear()}</span>
-                <span className="text-slate-600">—</span>
-                <span className="text-slate-400">تصميم وتطوير:</span>
-                <a
-                  href={PORTFOLIO_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="اضغط لزيارة البورتفوليو الرسمي لـ نورهان صلاح"
-                  className="group inline-flex items-center gap-1.5 text-amber-300 hover:text-white font-extrabold text-sm sm:text-base px-3 py-1 rounded-xl bg-amber-500/10 hover:bg-gradient-to-r hover:from-amber-500 hover:to-emerald-600 border border-amber-500/30 hover:border-transparent transition-all duration-300 shadow-sm hover:shadow-lg hover:shadow-amber-500/20 cursor-pointer"
-                >
-                  <span>{OWNER_NAME}</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-amber-400 group-hover:text-white transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                  <span className="text-[10px] font-semibold bg-slate-950/60 group-hover:bg-black/25 text-amber-200 group-hover:text-white px-2 py-0.5 rounded-md mr-0.5">
-                    زيارة البورتفوليو
-                  </span>
-                </a>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3.5 py-1.5 rounded-xl font-semibold">
-              <Lock className="w-3.5 h-3.5" />
-              <span>Source Code Protected | الكود المصدري محمي</span>
-            </div>
+          <!-- شريط معلومات الفلترة -->
+          <div id="searchResultBanner" class="hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-3.5 py-2 text-xs font-bold flex items-center justify-between">
+            <span id="searchResultText">نتائج البحث:</span>
+            <button onclick="deleteAllFiltered()" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center gap-1">
+              <i class="fa-solid fa-user-xmark"></i>
+              <span>مسح جميع نتائج البحث من الشيت</span>
+            </button>
           </div>
         </div>
-      </footer>
+
+        <!-- جدول البيانات التفاعلي (شيت الإكسل الحي) -->
+        <div class="bg-white rounded-2xl shadow-md border border-slate-200/90 overflow-hidden">
+          <div class="bg-slate-100 border-b border-slate-200 px-5 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-table text-emerald-700"></i>
+              <h3 class="font-extrabold text-slate-800 text-sm sm:text-base">شيت التسويات الحي (Excel Grid)</h3>
+            </div>
+            <span id="tableCountBadge" class="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-lg">
+              0 سجل
+            </span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse">
+              <thead>
+                <tr class="bg-slate-800 text-slate-200 text-xs uppercase">
+                  <th class="py-3 px-3 w-10 text-center">
+                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" class="rounded border-slate-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+                  </th>
+                  <th class="py-3 px-4 font-bold border-l border-slate-700">رقم الدفتر</th>
+                  <th class="py-3 px-4 font-bold border-l border-slate-700">اسم الموظف</th>
+                  <th class="py-3 px-4 font-bold border-l border-slate-700">الـ ID الوظيفي</th>
+                  <th class="py-3 px-4 font-bold border-l border-slate-700">صافي التسوية</th>
+                  <th class="py-3 px-4 font-bold text-center">إجراءات (تعديل / مسح)</th>
+                </tr>
+              </thead>
+
+              <tbody id="tableBody" class="divide-y divide-slate-200 text-sm">
+                <!-- الصف الحي أثناء الكتابة + صفوف الموظفين يتم توليدها بالجافاسكريبت -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
     </div>
-  );
-}
+  </main>
+
+  <!-- نافذة استيراد بيانات من الإكسل (Modal) -->
+  <div id="importModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+        <h3 class="font-extrabold text-base flex items-center gap-2">
+          <i class="fa-solid fa-file-csv text-emerald-400"></i>
+          <span>استيراد بيانات من شيت Excel</span>
+        </h3>
+        <button onclick="closeImportModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <p class="text-xs text-slate-600 leading-relaxed font-semibold">
+          يمكنكِ نسخ الصفوف مباشرة من شيت الإكسل ولصقها هنا (بالترتيب: <b>رقم الدفتر، اسم الموظف، الـ ID، صافي التسوية</b>) مفصولة بفاصلة أو Tab:
+        </p>
+        <textarea
+          id="bulkPasteArea"
+          rows="5"
+          placeholder="101, أحمد محمد علي, EMP-101, 4500&#10;102, سارة محمود حسن, EMP-102, 6200.50"
+          class="w-full p-3 rounded-xl border border-slate-300 text-xs font-mono focus:border-emerald-600 outline-none"
+        ></textarea>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button onclick="closeImportModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">
+            إلغاء
+          </button>
+          <button onclick="processBulkImport()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
+            استيراد وإضافة للشيت
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- الفوتر الرسمي بحقوق الملكية لـ نورهان صلاح ورابط البورتفوليو -->
+  <footer class="bg-slate-900 text-slate-300 border-t border-slate-800 mt-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs sm:text-sm">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+        <span class="font-semibold">جميع الحقوق محفوظة © 2026 — تصميم وتطوير:</span>
+        <a
+          href="https://nourhan-salah.github.io/nour-portfolio/?fbclid=IwVERDUAUkwOlleHRuA2FlbQIxMABwZG9mAXNydGMGYXBwX2lkDDM1MDY4NTUzMTcyOAABHsaIO844ow-bJ2Vt8YZu7IGR-mvxl4y7vc3tKWOJz9f9nCc5Cy7K8wvr9Gw4_aem_ZfZ8NWbfFDZnPxrsO1x0Kg"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1.5 font-extrabold text-emerald-400 hover:text-emerald-300 underline decoration-emerald-500/60 underline-offset-4 transition transform hover:scale-105"
+          title="زيارة البورتفوليو الخاص بـ نورهان صلاح"
+        >
+          <span>نورهان صلاح</span>
+          <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
+        </a>
+      </div>
+
+      <div class="flex items-center gap-3 text-xs text-slate-400">
+        <span class="flex items-center gap-1 text-emerald-400 font-bold">
+          <i class="fa-solid fa-lock"></i>
+          الكود المصدري محمي
+        </span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- أكواد الجافاسكريبت للتفاعل والمزامنة الحية وحماية الـ Source Code -->
+  <script>
+    const STORAGE_KEY = 'nourhan_settlement_sheet_v1';
+    let employees = [];
+    let selectedIds = new Set();
+
+    // قناة اتصال لحظية بين المتصفحات والتابات المفتوحة في نفس الوقت
+    const syncChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('settlement_live_sync') : null;
+
+    const defaultDemoData = [
+      { id: 'rec_1', ledgerNo: '101', name: 'أحمد محمود عبد الرحمن', empId: 'EMP-2041', settlement: 5450.00, updatedAt: 'منذ قليل' },
+      { id: 'rec_2', ledgerNo: '102', name: 'مريم طارق الشناوي', empId: 'EMP-2042', settlement: 7820.50, updatedAt: 'منذ قليل' },
+      { id: 'rec_3', ledgerNo: '103', name: 'خالد وليد المنشاوي', empId: 'EMP-2043', settlement: 4190.75, updatedAt: 'منذ قليل' },
+      { id: 'rec_4', ledgerNo: '104', name: 'ياسمين سامح الجندي', empId: 'EMP-2044', settlement: 9300.00, updatedAt: 'منذ قليل' }
+    ];
+
+    // تحميل البيانات عند فتح الصفحة
+    window.addEventListener('DOMContentLoaded', () => {
+      loadFromStorage();
+      renderTable();
+      setupSourceCodeProtection();
+    });
+
+    // الاستماع لأي تعديل لحظي من تاب أخرى أو مستخدم آخر
+    if (syncChannel) {
+      syncChannel.onmessage = (event) => {
+        if (event.data && event.data.type === 'SYNC_DATA') {
+          employees = event.data.payload;
+          renderTable();
+          showToast('تم تحديث الشيت لحظياً بتعديل جديد!', 'info');
+        }
+      };
+    }
+
+    window.addEventListener('storage', (e) => {
+      if (e.key === STORAGE_KEY) {
+        loadFromStorage();
+        renderTable();
+      }
+    });
+
+    function loadFromStorage() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          employees = JSON.parse(saved);
+        } catch (err) {
+          employees = [...defaultDemoData];
+        }
+      } else {
+        employees = [...defaultDemoData];
+        saveToStorage(false);
+      }
+    }
+
+    function saveToStorage(broadcast = true) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
+      if (broadcast && syncChannel) {
+        syncChannel.postMessage({ type: 'SYNC_DATA', payload: employees });
+      }
+    }
+
+    // تحديث بطاقة المعاينة الحية والصف الحي أثناء الكتابة
+    function updateLivePreview() {
+      const ledger = document.getElementById('ledgerNo').value.trim();
+      const name = document.getElementById('empName').value.trim();
+      const empId = document.getElementById('empId').value.trim();
+      const settlementVal = document.getElementById('netSettlement').value;
+      const editId = document.getElementById('editRecordId').value;
+
+      document.getElementById('prevLedger').textContent = ledger || '—';
+      document.getElementById('prevName').textContent = name || '—';
+      document.getElementById('prevId').textContent = empId || '—';
+      document.getElementById('prevSettlement').textContent = settlementVal
+        ? Number(settlementVal).toLocaleString('ar-EG', { minimumFractionDigits: 2 }) + ' ج.م'
+        : '0.00 ج.م';
+
+      const statusBadge = document.getElementById('previewStatusBadge');
+      if (ledger || name || empId || settlementVal) {
+        statusBadge.textContent = 'جاري الإدخال الآن...';
+        statusBadge.className = 'text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold';
+      } else {
+        statusBadge.textContent = 'في انتظار الكتابة...';
+        statusBadge.className = 'text-[11px] px-2 py-0.5 rounded bg-white/10 text-slate-300';
+      }
+
+      // فحص التكرار للـ ID ورقم الدفتر
+      const duplicateId = employees.some(e => e.empId.toLowerCase() === empId.toLowerCase() && empId !== '' && e.id !== editId);
+      const duplicateLedger = employees.some(e => e.ledgerNo.toLowerCase() === ledger.toLowerCase() && ledger !== '' && e.id !== editId);
+
+      document.getElementById('idWarning').classList.toggle('hidden', !duplicateId);
+      document.getElementById('ledgerWarning').classList.toggle('hidden', !duplicateLedger);
+
+      renderTable();
+    }
+
+    // إضافة أو تعديل موظف
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const ledgerNo = document.getElementById('ledgerNo').value.trim();
+      const name = document.getElementById('empName').value.trim();
+      const empId = document.getElementById('empId').value.trim();
+      const settlement = parseFloat(document.getElementById('netSettlement').value) || 0;
+      const editId = document.getElementById('editRecordId').value;
+
+      if (!ledgerNo || !name || !empId) return;
+
+      const nowStr = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+      if (editId) {
+        employees = employees.map(emp =>
+          emp.id === editId ? { ...emp, ledgerNo, name, empId, settlement, updatedAt: nowStr } : emp
+        );
+        showToast(`تم تحديث بيانات الموظف "${name}" بنجاح`, 'success');
+      } else {
+        const newRecord = {
+          id: 'rec_' + Date.now(),
+          ledgerNo,
+          name,
+          empId,
+          settlement,
+          updatedAt: nowStr
+        };
+        employees.unshift(newRecord);
+        showToast(`تمت إضافة "${name}" إلى شيت التسويات بنجاح`, 'success');
+      }
+
+      saveToStorage();
+      resetForm();
+      renderTable();
+    }
+
+    function resetForm() {
+      document.getElementById('employeeForm').reset();
+      document.getElementById('editRecordId').value = '';
+      document.getElementById('formTitle').textContent = 'إدخال بيانات موظف جديد';
+      document.getElementById('editModeBadge').classList.add('hidden');
+      document.getElementById('cancelEditBtn').classList.add('hidden');
+      document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-plus-circle"></i><span>إضافة للشيت الآن</span>';
+      updateLivePreview();
+    }
+
+    // تعبئة الفورم للتعديل
+    function startEditRecord(id) {
+      const emp = employees.find(e => e.id === id);
+      if (!emp) return;
+      document.getElementById('editRecordId').value = emp.id;
+      document.getElementById('ledgerNo').value = emp.ledgerNo;
+      document.getElementById('empName').value = emp.name;
+      document.getElementById('empId').value = emp.empId;
+      document.getElementById('netSettlement').value = emp.settlement;
+
+      document.getElementById('formTitle').textContent = 'تعديل بيانات الموظف';
+      document.getElementById('editModeBadge').classList.remove('hidden');
+      document.getElementById('cancelEditBtn').classList.remove('hidden');
+      document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>حفظ التعديلات</span>';
+      updateLivePreview();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // حذف موظف واحد فوراً
+    function deleteRecord(id) {
+      const emp = employees.find(e => e.id === id);
+      if (!emp) return;
+      employees = employees.filter(e => e.id !== id);
+      selectedIds.delete(id);
+      saveToStorage();
+      renderTable();
+      showToast(`تم مسح الموظف "${emp.name}" من الشيت نهائياً`, 'danger');
+    }
+
+    // رسم الجدول + الصف الحي + البحث الفوري
+    function renderTable() {
+      const tbody = document.getElementById('tableBody');
+      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+
+      document.getElementById('clearSearchBtn').classList.toggle('hidden', query === '');
+
+      const filtered = employees.filter(emp =>
+        emp.name.toLowerCase().includes(query) ||
+        emp.empId.toLowerCase().includes(query) ||
+        emp.ledgerNo.toLowerCase().includes(query)
+      );
+
+      // شريط نتائج البحث
+      const searchBanner = document.getElementById('searchResultBanner');
+      if (query !== '') {
+        searchBanner.classList.remove('hidden');
+        document.getElementById('searchResultText').textContent = `نتائج البحث عن "${query}": تم العثور على (${filtered.length}) موظف`;
+      } else {
+        searchBanner.classList.add('hidden');
+      }
+
+      // تحديث الإحصائيات
+      const totalCount = employees.length;
+      const totalAmount = employees.reduce((sum, e) => sum + (Number(e.settlement) || 0), 0);
+      const avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
+
+      document.getElementById('statTotalCount').textContent = totalCount;
+      document.getElementById('statTotalAmount').textContent = totalAmount.toLocaleString('ar-EG', { minimumFractionDigits: 2 }) + ' ج.م';
+      document.getElementById('statAvgAmount').textContent = avgAmount.toLocaleString('ar-EG', { minimumFractionDigits: 2 }) + ' ج.م';
+      document.getElementById('tableCountBadge').textContent = `${filtered.length} سجل معروض`;
+
+      let rowsHtml = '';
+
+      // إضافة صف المعاينة الحية في أعلى الجدول أثناء الكتابة
+      const liveLedger = document.getElementById('ledgerNo').value.trim();
+      const liveName = document.getElementById('empName').value.trim();
+      const liveEmpId = document.getElementById('empId').value.trim();
+      const liveSettlement = document.getElementById('netSettlement').value;
+      const isEditing = document.getElementById('editRecordId').value !== '';
+
+      if (!isEditing && (liveLedger || liveName || liveEmpId || liveSettlement)) {
+        rowsHtml += `
+          <tr class="bg-emerald-50/90 border-b-2 border-emerald-400 animate-pulse">
+            <td class="py-3 px-3 text-center">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            </td>
+            <td class="py-3 px-4 font-mono font-bold text-emerald-800">${escapeHtml(liveLedger || '...')}</td>
+            <td class="py-3 px-4 font-extrabold text-emerald-900">
+              ${escapeHtml(liveName || 'جاري كتابة الاسم...')}
+              <span class="mr-2 text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold">معاينة حية</span>
+            </td>
+            <td class="py-3 px-4 font-mono text-xs font-bold text-emerald-700">${escapeHtml(liveEmpId || '...')}</td>
+            <td class="py-3 px-4 font-extrabold text-emerald-700">
+              ${liveSettlement ? Number(liveSettlement).toLocaleString('ar-EG', { minimumFractionDigits: 2 }) + ' ج.م' : '0.00 ج.م'}
+            </td>
+            <td class="py-3 px-4 text-center text-xs font-bold text-emerald-600">قيد الإدخال...</td>
+          </tr>
+        `;
+      }
+
+      if (filtered.length === 0) {
+        rowsHtml += `
+          <tr>
+            <td colspan="6" class="py-12 text-center text-slate-400">
+              <i class="fa-solid fa-folder-open text-3xl mb-2 block text-slate-300"></i>
+              <p class="font-bold text-sm">لا توجد سجلات مطابقة للبحث في شيت الإكسل حالياً</p>
+            </td>
+          </tr>
+        `;
+      } else {
+        filtered.forEach(emp => {
+          const isChecked = selectedIds.has(emp.id);
+          rowsHtml += `
+            <tr class="hover:bg-slate-50/90 transition ${isChecked ? 'bg-rose-50/50' : ''}">
+              <td class="py-3 px-3 text-center">
+                <input
+                  type="checkbox"
+                  ${isChecked ? 'checked' : ''}
+                  onchange="toggleRowSelect('${emp.id}', this.checked)"
+                  class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+              </td>
+              <td class="py-3 px-4 font-mono font-bold text-slate-700">
+                <span class="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs">${escapeHtml(emp.ledgerNo)}</span>
+              </td>
+              <td class="py-3 px-4 font-bold text-slate-900">${escapeHtml(emp.name)}</td>
+              <td class="py-3 px-4 font-mono text-xs font-bold text-indigo-700">
+                <span class="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100">${escapeHtml(emp.empId)}</span>
+              </td>
+              <td class="py-3 px-4 font-extrabold text-emerald-700">
+                ${Number(emp.settlement).toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+              </td>
+              <td class="py-3 px-4 text-center">
+                <div class="inline-flex items-center gap-1.5">
+                  <button
+                    onclick="startEditRecord('${emp.id}')"
+                    class="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold transition flex items-center gap-1"
+                    title="تعديل"
+                  >
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>تعديل</span>
+                  </button>
+                  <button
+                    onclick="deleteRecord('${emp.id}')"
+                    class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-200 text-xs font-bold transition flex items-center gap-1"
+                    title="مسح الموظف من الشيت"
+                  >
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span>مسح</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+      }
+
+      tbody.innerHTML = rowsHtml;
+      updateSelectedButtonUI();
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      renderTable();
+    }
+
+    function toggleRowSelect(id, checked) {
+      if (checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+      renderTable();
+    }
+
+    function toggleSelectAll(checkbox) {
+      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+      const filtered = employees.filter(emp =>
+        emp.name.toLowerCase().includes(query) ||
+        emp.empId.toLowerCase().includes(query) ||
+        emp.ledgerNo.toLowerCase().includes(query)
+      );
+
+      if (checkbox.checked) {
+        filtered.forEach(e => selectedIds.add(e.id));
+      } else {
+        filtered.forEach(e => selectedIds.delete(e.id));
+      }
+      renderTable();
+    }
+
+    function updateSelectedButtonUI() {
+      const btn = document.getElementById('deleteSelectedBtn');
+      const countSpan = document.getElementById('selectedCount');
+      countSpan.textContent = selectedIds.size;
+      btn.classList.toggle('hidden', selectedIds.size === 0);
+    }
+
+    function deleteSelectedRecords() {
+      if (selectedIds.size === 0) return;
+      const count = selectedIds.size;
+      employees = employees.filter(e => !selectedIds.has(e.id));
+      selectedIds.clear();
+      document.getElementById('selectAllCheckbox').checked = false;
+      saveToStorage();
+      renderTable();
+      showToast(`تم مسح (${count}) موظف محدد من الشيت`, 'danger');
+    }
+
+    function deleteAllFiltered() {
+      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+      if (!query) return;
+      const beforeCount = employees.length;
+      employees = employees.filter(emp =>
+        !(emp.name.toLowerCase().includes(query) ||
+          emp.empId.toLowerCase().includes(query) ||
+          emp.ledgerNo.toLowerCase().includes(query))
+      );
+      const removed = beforeCount - employees.length;
+      document.getElementById('searchInput').value = '';
+      saveToStorage();
+      renderTable();
+      showToast(`تم مسح (${removed}) موظف مطابق للبحث من الشيت`, 'danger');
+    }
+
+    function resetDemoData() {
+      employees = [...defaultDemoData];
+      selectedIds.clear();
+      saveToStorage();
+      renderTable();
+      showToast('تمت استعادة البيانات التجريبية بنجاح', 'info');
+    }
+
+    // تصدير الشيت إلى ملف Excel (CSV يدعم العربية)
+    function exportToExcel() {
+      if (employees.length === 0) {
+        showToast('الشيت فارغ حالياً لا يوجد ما يتم تصديره!', 'danger');
+        return;
+      }
+      const headers = ['رقم الموظف في الدفتر', 'اسم الموظف', 'الـ ID الوظيفي', 'صافي التسوية'];
+      const rows = employees.map(e => [
+        `"${e.ledgerNo}"`,
+        `"${e.name}"`,
+        `"${e.empId}"`,
+        e.settlement
+      ]);
+
+      // إضافة سطر حقوق الملكية في نهاية شيت الإكسل
+      rows.push([]);
+      rows.push(['"جميع الحقوق محفوظة © 2026 - تصميم وتطوير: نورهان صلاح"']);
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `شيت_تسويات_الموظفين_نورهان_صلاح.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('تم تحميل ملف الإكسل (CSV) بنجاح!', 'success');
+    }
+
+    // نافذة استيراد الإكسل
+    function openImportModal() {
+      const modal = document.getElementById('importModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeImportModal() {
+      const modal = document.getElementById('importModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function processBulkImport() {
+      const raw = document.getElementById('bulkPasteArea').value.trim();
+      if (!raw) return;
+      const lines = raw.split('\n');
+      let added = 0;
+
+      lines.forEach(line => {
+        const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+        if (parts.length >= 4) {
+          employees.unshift({
+            id: 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            ledgerNo: parts[0].trim(),
+            name: parts[1].trim(),
+            empId: parts[2].trim(),
+            settlement: parseFloat(parts[3].trim()) || 0,
+            updatedAt: 'مستورد'
+          });
+          added++;
+        }
+      });
+
+      if (added > 0) {
+        saveToStorage();
+        renderTable();
+        document.getElementById('bulkPasteArea').value = '';
+        closeImportModal();
+        showToast(`تم استيراد (${added}) موظف للشيت بنجاح`, 'success');
+      } else {
+        showToast('تأكدي من كتابة 4 أعمدة في كل سطر مفصولة بفاصلة', 'danger');
+      }
+    }
+
+    // حماية وقفل الـ Source Code
+    function setupSourceCodeProtection() {
+      document.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showToast('🔒 عفواً! الكود المصدري وحقوق التصميم محمية لـ نورهان صلاح', 'shield');
+      });
+
+      document.addEventListener('keydown', (e) => {
+        const key = e.key.toUpperCase();
+        const isBlocked =
+          e.key === 'F12' ||
+          (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(key)) ||
+          (e.ctrlKey && ['U', 'S'].includes(key));
+
+        if (isBlocked) {
+          e.preventDefault();
+          showToast('🔒 تم حظر عرض الكود المصدري — جميع الحقوق محفوظة لـ نورهان صلاح', 'shield');
+          return false;
+        }
+      });
+    }
+
+    // دالة إظهار الإشعارات الأنيقة
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+
+      let colors = 'bg-slate-900 text-white border-slate-700';
+      let icon = 'fa-circle-info text-emerald-400';
+
+      if (type === 'success') {
+        colors = 'bg-emerald-900 text-white border-emerald-500';
+        icon = 'fa-circle-check text-emerald-300';
+      } else if (type === 'danger') {
+        colors = 'bg-rose-900 text-white border-rose-500';
+        icon = 'fa-trash-can text-rose-300';
+      } else if (type === 'shield') {
+        colors = 'bg-slate-950 text-amber-300 border-amber-500';
+        icon = 'fa-shield-halved text-amber-400';
+      }
+
+      toast.className = `px-4 py-2.5 rounded-xl border shadow-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all duration-300 ${colors}`;
+      toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
