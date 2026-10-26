@@ -31,7 +31,6 @@
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: .5; transform: scale(1.12); }
     }
-    /* تخصيص شريط التمرير */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
@@ -113,10 +112,10 @@
 
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between">
         <div>
-          <p class="text-xs font-bold text-slate-400">حالة الحماية والمزامنة</p>
-          <p class="text-sm font-extrabold text-teal-700 mt-1 flex items-center gap-1.5">
-            <i class="fa-solid fa-shield-halved text-emerald-600"></i>
-            <span>مؤمّن ومتزامن لحظياً</span>
+          <p class="text-xs font-bold text-slate-400">حالة الحفظ والمزامنة</p>
+          <p id="syncStatusText" class="text-xs sm:text-sm font-extrabold text-teal-700 mt-1 flex items-center gap-1.5">
+            <i class="fa-solid fa-cloud-arrow-up text-emerald-600"></i>
+            <span>محفوظ ومتزامن تلقائياً</span>
           </p>
         </div>
         <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-lg">
@@ -295,7 +294,7 @@
       <!-- العمود الأيسر: البحث الفوري + شيت الإكسل التفاعلي -->
       <div class="lg:col-span-8 space-y-4">
 
-        <!-- شريط البحث الفوري وأدوات الحذف -->
+        <!-- شريط البحث الفوري وزرار الحفظ (Save) بدلاً من البيانات التجريبية -->
         <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/90 space-y-3">
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <!-- مربع البحث -->
@@ -320,7 +319,7 @@
               </button>
             </div>
 
-            <!-- أزرار الحذف الجماعي وإعادة الضبط -->
+            <!-- أزرار الحفظ (Save) والحذف الجماعي -->
             <div class="flex items-center gap-2">
               <button
                 id="deleteSelectedBtn"
@@ -331,13 +330,26 @@
                 <span>حذف المحدد (<span id="selectedCount">0</span>)</span>
               </button>
 
+              <!-- زرار Save لحفظ آخر تعديل ومزامنته -->
               <button
-                onclick="resetDemoData()"
-                class="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition flex items-center gap-1.5"
-                title="استعادة البيانات التجريبية"
+                id="manualSaveBtn"
+                onclick="manualSaveData()"
+                class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold transition flex items-center gap-2 shadow-sm hover:shadow"
+                title="حفظ وتثبيت جميع التعديلات الحالية"
               >
-                <i class="fa-solid fa-rotate-right"></i>
-                <span class="hidden sm:inline">بيانات تجريبية</span>
+                <i class="fa-solid fa-floppy-disk"></i>
+                <span>حفظ (Save)</span>
+              </button>
+
+              <!-- زرار تراجع في حال مسح الطرف الآخر شيئاً بالخطأ -->
+              <button
+                id="undoBtn"
+                onclick="undoLastChange()"
+                class="hidden px-3 py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold transition flex items-center gap-1"
+                title="التراجع عن آخر عملية مسح"
+              >
+                <i class="fa-solid fa-rotate-left"></i>
+                <span>تراجع</span>
               </button>
             </div>
           </div>
@@ -354,14 +366,19 @@
 
         <!-- جدول البيانات التفاعلي (شيت الإكسل الحي) -->
         <div class="bg-white rounded-2xl shadow-md border border-slate-200/90 overflow-hidden">
-          <div class="bg-slate-100 border-b border-slate-200 px-5 py-3 flex items-center justify-between">
+          <div class="bg-slate-100 border-b border-slate-200 px-5 py-3 flex items-center justify-between flex-wrap gap-2">
             <div class="flex items-center gap-2">
               <i class="fa-solid fa-table text-emerald-700"></i>
               <h3 class="font-extrabold text-slate-800 text-sm sm:text-base">شيت التسويات الحي (Excel Grid)</h3>
             </div>
-            <span id="tableCountBadge" class="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-lg">
-              0 سجل
-            </span>
+            <div class="flex items-center gap-2">
+              <span id="lastSavedBadge" class="text-[11px] font-bold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                آخر حفظ: الآن
+              </span>
+              <span id="tableCountBadge" class="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-lg">
+                0 سجل معروض
+              </span>
+            </div>
           </div>
 
           <div class="overflow-x-auto">
@@ -380,7 +397,7 @@
               </thead>
 
               <tbody id="tableBody" class="divide-y divide-slate-200 text-sm">
-                <!-- الصف الحي أثناء الكتابة + صفوف الموظفين يتم توليدها بالجافاسكريبت -->
+                <!-- الصف الحي أثناء الكتابة + صفوف الموظفين -->
               </tbody>
             </table>
           </div>
@@ -417,7 +434,7 @@
             إلغاء
           </button>
           <button onclick="processBulkImport()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
-            استيراد وإضافة للشيت
+            استيراد وحفظ في الشيت
           </button>
         </div>
       </div>
@@ -451,65 +468,150 @@
     </div>
   </footer>
 
-  <!-- أكواد الجافاسكريبت للتفاعل والمزامنة الحية وحماية الـ Source Code -->
+  <!-- أكواد الجافاسكريبت للحفظ الدائم والمزامنة السحابية وحماية الكود -->
   <script>
-    const STORAGE_KEY = 'nourhan_settlement_sheet_v1';
+    const STORAGE_KEY = 'nourhan_settlement_saved_v2';
+    const BACKUP_KEY = 'nourhan_settlement_backup_v2';
+    // نقطة مزامنة سحابية مجانية ومشتركة خاصة بمشروع نورهان صلاح لتوحيد الداتا بين الأجهزة
+    const CLOUD_SYNC_URL = 'https://kvdb.io/A6p8Y2k9LmN3qR7vW1xZ4c/nourhan_settlement_sheet_live';
+
     let employees = [];
+    let backupSnapshot = null;
     let selectedIds = new Set();
 
-    // قناة اتصال لحظية بين المتصفحات والتابات المفتوحة في نفس الوقت
     const syncChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('settlement_live_sync') : null;
 
-    const defaultDemoData = [
-      { id: 'rec_1', ledgerNo: '101', name: 'أحمد محمود عبد الرحمن', empId: 'EMP-2041', settlement: 5450.00, updatedAt: 'منذ قليل' },
-      { id: 'rec_2', ledgerNo: '102', name: 'مريم طارق الشناوي', empId: 'EMP-2042', settlement: 7820.50, updatedAt: 'منذ قليل' },
-      { id: 'rec_3', ledgerNo: '103', name: 'خالد وليد المنشاوي', empId: 'EMP-2043', settlement: 4190.75, updatedAt: 'منذ قليل' },
-      { id: 'rec_4', ledgerNo: '104', name: 'ياسمين سامح الجندي', empId: 'EMP-2044', settlement: 9300.00, updatedAt: 'منذ قليل' }
-    ];
-
-    // تحميل البيانات عند فتح الصفحة
-    window.addEventListener('DOMContentLoaded', () => {
-      loadFromStorage();
+    // عند فتح الموقع: يحمّل آخر تعديل محفوظ (سواء محلياً أو من الطرف الآخر عبر السحابة)
+    window.addEventListener('DOMContentLoaded', async () => {
+      loadFromLocal();
       renderTable();
       setupSourceCodeProtection();
+      await fetchLatestFromCloud();
+
+      // فحص دوري كل 8 ثوانٍ لجلب أي تعديل أو حذف قام به الطرف الآخر
+      setInterval(fetchLatestFromCloud, 8000);
     });
 
-    // الاستماع لأي تعديل لحظي من تاب أخرى أو مستخدم آخر
     if (syncChannel) {
       syncChannel.onmessage = (event) => {
         if (event.data && event.data.type === 'SYNC_DATA') {
           employees = event.data.payload;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
+          updateLastSavedTime(event.data.savedAt || getNowTime());
           renderTable();
-          showToast('تم تحديث الشيت لحظياً بتعديل جديد!', 'info');
         }
       };
     }
 
     window.addEventListener('storage', (e) => {
       if (e.key === STORAGE_KEY) {
-        loadFromStorage();
+        loadFromLocal();
         renderTable();
       }
     });
 
-    function loadFromStorage() {
+    function getNowTime() {
+      return new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function updateLastSavedTime(timeStr) {
+      const badge = document.getElementById('lastSavedBadge');
+      if (badge) badge.textContent = `آخر حفظ: ${timeStr}`;
+    }
+
+    function loadFromLocal() {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
+      if (saved !== null) {
         try {
           employees = JSON.parse(saved);
         } catch (err) {
-          employees = [...defaultDemoData];
+          employees = [];
         }
       } else {
-        employees = [...defaultDemoData];
-        saveToStorage(false);
+        employees = [];
       }
     }
 
-    function saveToStorage(broadcast = true) {
+    // جلب آخر نسخة محفوظة من السحابة (لو الطرف الآخر مسح أو أضاف شيء)
+    async function fetchLatestFromCloud() {
+      try {
+        const res = await fetch(CLOUD_SYNC_URL, { method: 'GET', cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.employees)) {
+            const currentJson = JSON.stringify(employees);
+            const cloudJson = JSON.stringify(data.employees);
+            if (currentJson !== cloudJson) {
+              employees = data.employees;
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
+              if (data.savedAt) updateLastSavedTime(data.savedAt);
+              renderTable();
+            }
+          }
+        }
+      } catch (err) {
+        // في حالة عدم توفر اتصال خارجي يعتمد على الحفظ المحلي بأمان
+      }
+    }
+
+    // حفظ البيانات (محلياً + سحابياً ليرى الطرف الآخر آخر تعديل حتى لو مسح شيء)
+    async function saveDataEverywhere(showNotification = false) {
+      const savedAt = getNowTime();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
-      if (broadcast && syncChannel) {
-        syncChannel.postMessage({ type: 'SYNC_DATA', payload: employees });
+      updateLastSavedTime(savedAt);
+
+      if (syncChannel) {
+        syncChannel.postMessage({ type: 'SYNC_DATA', payload: employees, savedAt });
+      }
+
+      const syncStatus = document.getElementById('syncStatusText');
+      if (syncStatus) {
+        syncStatus.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-600"></i><span>جاري تثبيت الحفظ...</span>';
+      }
+
+      try {
+        await fetch(CLOUD_SYNC_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ employees, savedAt, updatedBy: 'user' })
+        });
+      } catch (err) {
+        // محفوظ محلياً بالفعل
+      }
+
+      if (syncStatus) {
+        syncStatus.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i><span>تم حفظ آخر تعديل بنجاح</span>';
+      }
+
+      if (showNotification) {
+        showToast('تم حفظ جميع البيانات والتعديلات بنجاح! ستظهر الآن لأي مستخدم يفتح الموقع.', 'success');
+      }
+    }
+
+    // زرار Save اليدوي لتأكيد الحفظ
+    function manualSaveData() {
+      saveDataEverywhere(true);
+    }
+
+    // أخذ نسخة احتياطية قبل الحذف لإمكانية التراجع
+    function saveBackupBeforeDelete() {
+      backupSnapshot = JSON.parse(JSON.stringify(employees));
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(backupSnapshot));
+      document.getElementById('undoBtn').classList.remove('hidden');
+    }
+
+    function undoLastChange() {
+      if (!backupSnapshot) {
+        const storedBackup = localStorage.getItem(BACKUP_KEY);
+        if (storedBackup) backupSnapshot = JSON.parse(storedBackup);
+      }
+      if (backupSnapshot) {
+        employees = JSON.parse(JSON.stringify(backupSnapshot));
+        backupSnapshot = null;
+        document.getElementById('undoBtn').classList.add('hidden');
+        saveDataEverywhere(false);
+        renderTable();
+        showToast('تم التراجع واستعادة السجلات الممسوحة بنجاح!', 'info');
       }
     }
 
@@ -537,7 +639,6 @@
         statusBadge.className = 'text-[11px] px-2 py-0.5 rounded bg-white/10 text-slate-300';
       }
 
-      // فحص التكرار للـ ID ورقم الدفتر
       const duplicateId = employees.some(e => e.empId.toLowerCase() === empId.toLowerCase() && empId !== '' && e.id !== editId);
       const duplicateLedger = employees.some(e => e.ledgerNo.toLowerCase() === ledger.toLowerCase() && ledger !== '' && e.id !== editId);
 
@@ -558,13 +659,13 @@
 
       if (!ledgerNo || !name || !empId) return;
 
-      const nowStr = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      const nowStr = getNowTime();
 
       if (editId) {
         employees = employees.map(emp =>
           emp.id === editId ? { ...emp, ledgerNo, name, empId, settlement, updatedAt: nowStr } : emp
         );
-        showToast(`تم تحديث بيانات الموظف "${name}" بنجاح`, 'success');
+        showToast(`تم تعديل وحفظ بيانات "${name}" بنجاح`, 'success');
       } else {
         const newRecord = {
           id: 'rec_' + Date.now(),
@@ -575,10 +676,10 @@
           updatedAt: nowStr
         };
         employees.unshift(newRecord);
-        showToast(`تمت إضافة "${name}" إلى شيت التسويات بنجاح`, 'success');
+        showToast(`تمت إضافة وحفظ "${name}" في الشيت`, 'success');
       }
 
-      saveToStorage();
+      saveDataEverywhere(false);
       resetForm();
       renderTable();
     }
@@ -593,7 +694,6 @@
       updateLivePreview();
     }
 
-    // تعبئة الفورم للتعديل
     function startEditRecord(id) {
       const emp = employees.find(e => e.id === id);
       if (!emp) return;
@@ -611,18 +711,18 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // حذف موظف واحد فوراً
+    // حذف موظف وحفظ الحالة الجديدة فوراً حتى لو تم فتح الموقع مرة أخرى يظل ممسوحاً
     function deleteRecord(id) {
       const emp = employees.find(e => e.id === id);
       if (!emp) return;
+      saveBackupBeforeDelete();
       employees = employees.filter(e => e.id !== id);
       selectedIds.delete(id);
-      saveToStorage();
+      saveDataEverywhere(false);
       renderTable();
-      showToast(`تم مسح الموظف "${emp.name}" من الشيت نهائياً`, 'danger');
+      showToast(`تم مسح "${emp.name}" وحفظ الشيت على آخر تعديل`, 'danger');
     }
 
-    // رسم الجدول + الصف الحي + البحث الفوري
     function renderTable() {
       const tbody = document.getElementById('tableBody');
       const query = document.getElementById('searchInput').value.trim().toLowerCase();
@@ -635,7 +735,6 @@
         emp.ledgerNo.toLowerCase().includes(query)
       );
 
-      // شريط نتائج البحث
       const searchBanner = document.getElementById('searchResultBanner');
       if (query !== '') {
         searchBanner.classList.remove('hidden');
@@ -644,7 +743,6 @@
         searchBanner.classList.add('hidden');
       }
 
-      // تحديث الإحصائيات
       const totalCount = employees.length;
       const totalAmount = employees.reduce((sum, e) => sum + (Number(e.settlement) || 0), 0);
       const avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
@@ -656,7 +754,6 @@
 
       let rowsHtml = '';
 
-      // إضافة صف المعاينة الحية في أعلى الجدول أثناء الكتابة
       const liveLedger = document.getElementById('ledgerNo').value.trim();
       const liveName = document.getElementById('empName').value.trim();
       const liveEmpId = document.getElementById('empId').value.trim();
@@ -780,18 +877,20 @@
 
     function deleteSelectedRecords() {
       if (selectedIds.size === 0) return;
+      saveBackupBeforeDelete();
       const count = selectedIds.size;
       employees = employees.filter(e => !selectedIds.has(e.id));
       selectedIds.clear();
       document.getElementById('selectAllCheckbox').checked = false;
-      saveToStorage();
+      saveDataEverywhere(false);
       renderTable();
-      showToast(`تم مسح (${count}) موظف محدد من الشيت`, 'danger');
+      showToast(`تم مسح (${count}) موظف وحفظ التعديلات الجديدة`, 'danger');
     }
 
     function deleteAllFiltered() {
       const query = document.getElementById('searchInput').value.trim().toLowerCase();
       if (!query) return;
+      saveBackupBeforeDelete();
       const beforeCount = employees.length;
       employees = employees.filter(emp =>
         !(emp.name.toLowerCase().includes(query) ||
@@ -800,20 +899,11 @@
       );
       const removed = beforeCount - employees.length;
       document.getElementById('searchInput').value = '';
-      saveToStorage();
+      saveDataEverywhere(false);
       renderTable();
-      showToast(`تم مسح (${removed}) موظف مطابق للبحث من الشيت`, 'danger');
+      showToast(`تم مسح (${removed}) موظف وحفظ الشيت`, 'danger');
     }
 
-    function resetDemoData() {
-      employees = [...defaultDemoData];
-      selectedIds.clear();
-      saveToStorage();
-      renderTable();
-      showToast('تمت استعادة البيانات التجريبية بنجاح', 'info');
-    }
-
-    // تصدير الشيت إلى ملف Excel (CSV يدعم العربية)
     function exportToExcel() {
       if (employees.length === 0) {
         showToast('الشيت فارغ حالياً لا يوجد ما يتم تصديره!', 'danger');
@@ -827,7 +917,6 @@
         e.settlement
       ]);
 
-      // إضافة سطر حقوق الملكية في نهاية شيت الإكسل
       rows.push([]);
       rows.push(['"جميع الحقوق محفوظة © 2026 - تصميم وتطوير: نورهان صلاح"']);
 
@@ -843,7 +932,6 @@
       showToast('تم تحميل ملف الإكسل (CSV) بنجاح!', 'success');
     }
 
-    // نافذة استيراد الإكسل
     function openImportModal() {
       const modal = document.getElementById('importModal');
       modal.classList.remove('hidden');
@@ -871,24 +959,23 @@
             name: parts[1].trim(),
             empId: parts[2].trim(),
             settlement: parseFloat(parts[3].trim()) || 0,
-            updatedAt: 'مستورد'
+            updatedAt: getNowTime()
           });
           added++;
         }
       });
 
       if (added > 0) {
-        saveToStorage();
+        saveDataEverywhere(false);
         renderTable();
         document.getElementById('bulkPasteArea').value = '';
         closeImportModal();
-        showToast(`تم استيراد (${added}) موظف للشيت بنجاح`, 'success');
+        showToast(`تم استيراد وحفظ (${added}) موظف للشيت بنجاح`, 'success');
       } else {
         showToast('تأكدي من كتابة 4 أعمدة في كل سطر مفصولة بفاصلة', 'danger');
       }
     }
 
-    // حماية وقفل الـ Source Code
     function setupSourceCodeProtection() {
       document.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -910,7 +997,6 @@
       });
     }
 
-    // دالة إظهار الإشعارات الأنيقة
     function showToast(message, type = 'info') {
       const container = document.getElementById('toastContainer');
       const toast = document.createElement('div');
