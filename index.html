@@ -57,7 +57,7 @@
               مباشر (Live)
             </span>
           </div>
-          <p class="text-emerald-200/80 text-xs sm:text-sm mt-0.5">إدارة حية لبيانات الموظفين وصافي التسويات مع بحث وحذف فوري وتكامل مع Excel</p>
+          <p class="text-emerald-200/80 text-xs sm:text-sm mt-0.5">إدارة حية لتسويات نهاية الخدمة مع بحث وحذف فوري وتكامل ذكي مع Excel</p>
         </div>
       </div>
 
@@ -148,7 +148,7 @@
             <!-- رقم الموظف في الدفتر -->
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">
-                رقم الموظف في الدفتر <span class="text-rose-500">*</span>
+                رقم الموظف في الدفتر (الرقم) <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
                 <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
@@ -158,7 +158,7 @@
                   type="text"
                   id="ledgerNo"
                   required
-                  placeholder="مثال: 105 أو د-204"
+                  placeholder="مثال: 1 أو 41 أو 101"
                   oninput="updateLivePreview()"
                   class="w-full pr-9 pl-3 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-semibold transition"
                 />
@@ -188,10 +188,10 @@
               </div>
             </div>
 
-            <!-- الـ ID الخاص بالموظف -->
+            <!-- الـ ID الخاص بالموظف (Code) -->
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">
-                الـ ID الخاص بالموظف <span class="text-rose-500">*</span>
+                الـ ID / كود الموظف (Code) <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
                 <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
@@ -201,20 +201,20 @@
                   type="text"
                   id="empId"
                   required
-                  placeholder="مثال: EMP-9021 أو 2980115"
+                  placeholder="مثال: 15666 أو 13281"
                   oninput="updateLivePreview()"
                   class="w-full pr-9 pl-3 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-mono font-semibold transition"
                 />
               </div>
               <p id="idWarning" class="hidden text-xs text-rose-600 font-bold mt-1">
-                <i class="fa-solid fa-circle-exclamation ml-1"></i> تنبيه: هذا الـ ID موجود بالفعل في الشيت!
+                <i class="fa-solid fa-circle-exclamation ml-1"></i> تنبيه: هذا الـ Code موجود بالفعل في الشيت!
               </p>
             </div>
 
             <!-- صافي التسوية -->
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">
-                صافي التسوية (ج.م) <span class="text-rose-500">*</span>
+                صافي التسوية / المبلغ (ج.م) <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
                 <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
@@ -225,7 +225,7 @@
                   step="0.01"
                   id="netSettlement"
                   required
-                  placeholder="0.00"
+                  placeholder="مثال: 2828.51 أو -225.02"
                   oninput="updateLivePreview()"
                   class="w-full pr-9 pl-12 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-extrabold text-emerald-700 transition"
                 />
@@ -279,7 +279,7 @@
               <span id="prevName" class="font-bold text-white truncate max-w-[180px]">—</span>
             </div>
             <div class="flex justify-between items-center border-b border-white/10 pb-2">
-              <span class="text-slate-400 text-xs">الـ ID الوظيفي:</span>
+              <span class="text-slate-400 text-xs">الـ ID / الكود:</span>
               <span id="prevId" class="font-mono text-xs bg-white/10 px-2 py-0.5 rounded text-cyan-300">—</span>
             </div>
             <div class="flex justify-between items-center pt-1">
@@ -294,7 +294,7 @@
       <!-- العمود الأيسر: البحث الفوري + شيت الإكسل التفاعلي -->
       <div class="lg:col-span-8 space-y-4">
 
-        <!-- شريط البحث الفوري وزرار الحفظ (Save) بدلاً من البيانات التجريبية -->
+        <!-- شريط البحث الفوري وزرار الحفظ (Save) -->
         <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/90 space-y-3">
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <!-- مربع البحث -->
@@ -306,7 +306,7 @@
                 type="text"
                 id="searchInput"
                 oninput="renderTable()"
-                placeholder="ابحث فوراً باسم الموظف، أو الـ ID، أو رقم الدفتر لمسحه أو تعديله..."
+                placeholder="ابحث فوراً باسم الموظف، أو الـ Code، أو رقم الدفتر لمسحه أو تعديله..."
                 class="w-full pr-10 pl-9 py-2.5 rounded-xl bg-slate-50 border border-slate-300 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm font-semibold transition"
               />
               <button
@@ -381,17 +381,17 @@
             </div>
           </div>
 
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto max-h-[600px]">
             <table class="w-full text-right border-collapse">
-              <thead>
+              <thead class="sticky top-0 z-10">
                 <tr class="bg-slate-800 text-slate-200 text-xs uppercase">
                   <th class="py-3 px-3 w-10 text-center">
                     <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" class="rounded border-slate-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                   </th>
-                  <th class="py-3 px-4 font-bold border-l border-slate-700">رقم الدفتر</th>
+                  <th class="py-3 px-4 font-bold border-l border-slate-700">الرقم بالدفتر</th>
                   <th class="py-3 px-4 font-bold border-l border-slate-700">اسم الموظف</th>
-                  <th class="py-3 px-4 font-bold border-l border-slate-700">الـ ID الوظيفي</th>
-                  <th class="py-3 px-4 font-bold border-l border-slate-700">صافي التسوية</th>
+                  <th class="py-3 px-4 font-bold border-l border-slate-700">الـ Code / ID</th>
+                  <th class="py-3 px-4 font-bold border-l border-slate-700">صافي التسوية (له / عليه)</th>
                   <th class="py-3 px-4 font-bold text-center">إجراءات (تعديل / مسح)</th>
                 </tr>
               </thead>
@@ -407,35 +407,52 @@
     </div>
   </main>
 
-  <!-- نافذة استيراد بيانات من الإكسل (Modal) -->
+  <!-- نافذة استيراد بيانات من الإكسل الذكية (Modal) -->
   <div id="importModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+    <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden">
       <div class="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
         <h3 class="font-extrabold text-base flex items-center gap-2">
-          <i class="fa-solid fa-file-csv text-emerald-400"></i>
-          <span>استيراد بيانات من شيت Excel</span>
+          <i class="fa-solid fa-file-excel text-emerald-400"></i>
+          <span>الاستيراد الذكي من شيت تسويات الإكسل</span>
         </h3>
         <button onclick="closeImportModal()" class="text-slate-400 hover:text-white">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
       <div class="p-5 space-y-4">
-        <p class="text-xs text-slate-600 leading-relaxed font-semibold">
-          يمكنكِ نسخ الصفوف مباشرة من شيت الإكسل ولصقها هنا (بالترتيب: <b>رقم الدفتر، اسم الموظف، الـ ID، صافي التسوية</b>) مفصولة بفاصلة أو Tab:
-        </p>
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-950 space-y-1.5 leading-relaxed">
+          <p class="font-extrabold text-emerald-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>يدعم لصق شيت "تسويات نهاية الخدمة" مباشرة بجميع أوضاعه:</span>
+          </p>
+          <ul class="list-disc list-inside space-y-1 font-semibold text-slate-700">
+            <li><b>الوضع الأول (الشيت كامل):</b> حددي الجدول كله في الإكسل من العمود <b>A</b> إلى العمود <b>L</b> (الـ 3 جداول معاً) واعملي Copy ثم Paste هنا، وسيقوم الموقع بفصلهم وترتيبهم تلقائياً!</li>
+            <li><b>الوضع الثاني (جدول واحد):</b> انسخي أي 4 أعمدة معاً (المبلغ، code، الاسم، الرقم) والصقيهم هنا مباشرة.</li>
+          </ul>
+        </div>
+
         <textarea
           id="bulkPasteArea"
-          rows="5"
-          placeholder="101, أحمد محمد علي, EMP-101, 4500&#10;102, سارة محمود حسن, EMP-102, 6200.50"
-          class="w-full p-3 rounded-xl border border-slate-300 text-xs font-mono focus:border-emerald-600 outline-none"
+          rows="7"
+          placeholder="اضغطي هنا ثم اضغطي Ctrl + V للصق البيانات المنسوخة من شيت الإكسل مباشرة..."
+          class="w-full p-3.5 rounded-xl border border-slate-300 text-xs font-mono focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none bg-slate-50"
         ></textarea>
-        <div class="flex items-center justify-end gap-2 pt-2">
-          <button onclick="closeImportModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">
-            إلغاء
-          </button>
-          <button onclick="processBulkImport()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold">
-            استيراد وحفظ في الشيت
-          </button>
+
+        <div class="flex items-center justify-between flex-wrap gap-2 pt-1">
+          <label class="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+            <input type="checkbox" id="replaceExistingCheck" class="rounded text-emerald-600 focus:ring-emerald-500" />
+            <span>مسح البيانات القديمة واستبدالها بهذا الشيت الجديد</span>
+          </label>
+
+          <div class="flex items-center gap-2">
+            <button onclick="closeImportModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">
+              إلغاء
+            </button>
+            <button onclick="processBulkImport()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-md flex items-center gap-1.5">
+              <i class="fa-solid fa-check-double"></i>
+              <span>استيراد وحفظ في الشيت الآن</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -468,11 +485,10 @@
     </div>
   </footer>
 
-  <!-- أكواد الجافاسكريبت للحفظ الدائم والمزامنة السحابية وحماية الكود -->
+  <!-- أكواد الجافاسكريبت للحفظ الدائم والمزامنة السحابية والاستيراد الذكي -->
   <script>
     const STORAGE_KEY = 'nourhan_settlement_saved_v2';
     const BACKUP_KEY = 'nourhan_settlement_backup_v2';
-    // نقطة مزامنة سحابية مجانية ومشتركة خاصة بمشروع نورهان صلاح لتوحيد الداتا بين الأجهزة
     const CLOUD_SYNC_URL = 'https://kvdb.io/A6p8Y2k9LmN3qR7vW1xZ4c/nourhan_settlement_sheet_live';
 
     let employees = [];
@@ -481,14 +497,11 @@
 
     const syncChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('settlement_live_sync') : null;
 
-    // عند فتح الموقع: يحمّل آخر تعديل محفوظ (سواء محلياً أو من الطرف الآخر عبر السحابة)
     window.addEventListener('DOMContentLoaded', async () => {
       loadFromLocal();
       renderTable();
       setupSourceCodeProtection();
       await fetchLatestFromCloud();
-
-      // فحص دوري كل 8 ثوانٍ لجلب أي تعديل أو حذف قام به الطرف الآخر
       setInterval(fetchLatestFromCloud, 8000);
     });
 
@@ -532,7 +545,6 @@
       }
     }
 
-    // جلب آخر نسخة محفوظة من السحابة (لو الطرف الآخر مسح أو أضاف شيء)
     async function fetchLatestFromCloud() {
       try {
         const res = await fetch(CLOUD_SYNC_URL, { method: 'GET', cache: 'no-store' });
@@ -549,12 +561,9 @@
             }
           }
         }
-      } catch (err) {
-        // في حالة عدم توفر اتصال خارجي يعتمد على الحفظ المحلي بأمان
-      }
+      } catch (err) {}
     }
 
-    // حفظ البيانات (محلياً + سحابياً ليرى الطرف الآخر آخر تعديل حتى لو مسح شيء)
     async function saveDataEverywhere(showNotification = false) {
       const savedAt = getNowTime();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
@@ -575,25 +584,21 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ employees, savedAt, updatedBy: 'user' })
         });
-      } catch (err) {
-        // محفوظ محلياً بالفعل
-      }
+      } catch (err) {}
 
       if (syncStatus) {
         syncStatus.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i><span>تم حفظ آخر تعديل بنجاح</span>';
       }
 
       if (showNotification) {
-        showToast('تم حفظ جميع البيانات والتعديلات بنجاح! ستظهر الآن لأي مستخدم يفتح الموقع.', 'success');
+        showToast('تم حفظ جميع البيانات والتعديلات بنجاح!', 'success');
       }
     }
 
-    // زرار Save اليدوي لتأكيد الحفظ
     function manualSaveData() {
       saveDataEverywhere(true);
     }
 
-    // أخذ نسخة احتياطية قبل الحذف لإمكانية التراجع
     function saveBackupBeforeDelete() {
       backupSnapshot = JSON.parse(JSON.stringify(employees));
       localStorage.setItem(BACKUP_KEY, JSON.stringify(backupSnapshot));
@@ -615,7 +620,6 @@
       }
     }
 
-    // تحديث بطاقة المعاينة الحية والصف الحي أثناء الكتابة
     function updateLivePreview() {
       const ledger = document.getElementById('ledgerNo').value.trim();
       const name = document.getElementById('empName').value.trim();
@@ -648,7 +652,6 @@
       renderTable();
     }
 
-    // إضافة أو تعديل موظف
     function handleFormSubmit(e) {
       e.preventDefault();
       const ledgerNo = document.getElementById('ledgerNo').value.trim();
@@ -711,7 +714,6 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // حذف موظف وحفظ الحالة الجديدة فوراً حتى لو تم فتح الموقع مرة أخرى يظل ممسوحاً
     function deleteRecord(id) {
       const emp = employees.find(e => e.id === id);
       if (!emp) return;
@@ -792,6 +794,12 @@
       } else {
         filtered.forEach(emp => {
           const isChecked = selectedIds.has(emp.id);
+          const amountNum = Number(emp.settlement) || 0;
+          const amountClass = amountNum < 0 ? 'text-rose-600' : 'text-emerald-700';
+          const amountBadge = amountNum < 0
+            ? '<span class="mr-1.5 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">عليه</span>'
+            : '<span class="mr-1.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">له</span>';
+
           rowsHtml += `
             <tr class="hover:bg-slate-50/90 transition ${isChecked ? 'bg-rose-50/50' : ''}">
               <td class="py-3 px-3 text-center">
@@ -809,8 +817,9 @@
               <td class="py-3 px-4 font-mono text-xs font-bold text-indigo-700">
                 <span class="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100">${escapeHtml(emp.empId)}</span>
               </td>
-              <td class="py-3 px-4 font-extrabold text-emerald-700">
-                ${Number(emp.settlement).toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+              <td class="py-3 px-4 font-extrabold ${amountClass}" dir="ltr">
+                ${amountNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${amountBadge}
               </td>
               <td class="py-3 px-4 text-center">
                 <div class="inline-flex items-center gap-1.5">
@@ -909,7 +918,7 @@
         showToast('الشيت فارغ حالياً لا يوجد ما يتم تصديره!', 'danger');
         return;
       }
-      const headers = ['رقم الموظف في الدفتر', 'اسم الموظف', 'الـ ID الوظيفي', 'صافي التسوية'];
+      const headers = ['رقم الموظف في الدفتر', 'اسم الموظف', 'الـ Code / ID', 'صافي التسوية'];
       const rows = employees.map(e => [
         `"${e.ledgerNo}"`,
         `"${e.name}"`,
@@ -944,35 +953,99 @@
       modal.classList.remove('flex');
     }
 
+    // تحليل ذكي لـ 4 خلايا (سواء بترتيب الإكسل: المبلغ، الكود، الاسم، الرقم - أو العكس)
+    function parseFourCells(c0, c1, c2, c3) {
+      const clean = (v) => (v || '').toString().trim();
+      const v0 = clean(c0), v1 = clean(c1), v2 = clean(c2), v3 = clean(c3);
+
+      // تجاهل صف العناوين (الرقم، الاسم، المبلغ، code)
+      if (
+        v0.includes('المبلغ') || v3.includes('الرقم') ||
+        v0.includes('الرقم') || v2.includes('الاسم') ||
+        v1.toLowerCase() === 'code' || v2.toLowerCase() === 'code'
+      ) {
+        return null;
+      }
+
+      // فحص أين يوجد الاسم العربي (في الخلية 2 كما في شيت أندلسية أو الخلية 1)
+      const hasArabic = (str) => /[\u0600-\u06FF]/.test(str);
+
+      let ledgerNo, name, empId, settlementStr;
+
+      if (hasArabic(v2) && !hasArabic(v1)) {
+        // ترتيب شيت مستشفيات أندلسية عند النسخ من الإكسل: [المبلغ (0), code (1), الاسم (2), الرقم (3)]
+        settlementStr = v0;
+        empId = v1;
+        name = v2;
+        ledgerNo = v3;
+      } else {
+        // الترتيب العادي: [الرقم (0), الاسم (1), الكود (2), المبلغ (3)]
+        ledgerNo = v0;
+        name = v1;
+        empId = v2;
+        settlementStr = v3;
+      }
+
+      if (!name && !empId) return null;
+
+      // معالجة السالب المكتوب على اليمين في الإكسل مثل "959.6-"
+      let cleanNum = settlementStr.replace(/,/g, '').trim();
+      if (cleanNum.endsWith('-')) {
+        cleanNum = '-' + cleanNum.slice(0, -1);
+      }
+      const settlement = parseFloat(cleanNum) || 0;
+
+      return {
+        id: 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        ledgerNo: ledgerNo || '—',
+        name: name,
+        empId: empId || '—',
+        settlement: settlement,
+        updatedAt: getNowTime()
+      };
+    }
+
     function processBulkImport() {
       const raw = document.getElementById('bulkPasteArea').value.trim();
       if (!raw) return;
-      const lines = raw.split('\n');
-      let added = 0;
+
+      const replaceExisting = document.getElementById('replaceExistingCheck').checked;
+      if (replaceExisting) {
+        saveBackupBeforeDelete();
+        employees = [];
+      }
+
+      const lines = raw.split(/\r?\n/);
+      let importedRecords = [];
 
       lines.forEach(line => {
+        if (!line.trim()) return;
         const parts = line.includes('\t') ? line.split('\t') : line.split(',');
-        if (parts.length >= 4) {
-          employees.unshift({
-            id: 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            ledgerNo: parts[0].trim(),
-            name: parts[1].trim(),
-            empId: parts[2].trim(),
-            settlement: parseFloat(parts[3].trim()) || 0,
-            updatedAt: getNowTime()
-          });
-          added++;
+
+        // إذا تم نسخ الشيت بالكامل (3 مجموعات = 12 عموداً في السطر الواحد أو 8 أعمدة)
+        if (parts.length >= 8) {
+          for (let i = 0; i + 3 < parts.length; i += 4) {
+            const rec = parseFourCells(parts[i], parts[i + 1], parts[i + 2], parts[i + 3]);
+            if (rec) importedRecords.push(rec);
+          }
+        } else if (parts.length >= 4) {
+          const rec = parseFourCells(parts[0], parts[1], parts[2], parts[3]);
+          if (rec) importedRecords.push(rec);
         }
       });
 
-      if (added > 0) {
+      if (importedRecords.length > 0) {
+        // ترتيب الموظفين المستوردين تصاعدياً حسب رقم الدفتر (1, 2, 3 ... 126)
+        importedRecords.sort((a, b) => (parseInt(a.ledgerNo) || 99999) - (parseInt(b.ledgerNo) || 99999));
+
+        employees = [...importedRecords, ...employees];
         saveDataEverywhere(false);
         renderTable();
         document.getElementById('bulkPasteArea').value = '';
         closeImportModal();
-        showToast(`تم استيراد وحفظ (${added}) موظف للشيت بنجاح`, 'success');
+        showToast(`تم استيراد وحفظ (${importedRecords.length}) موظف من شيت الإكسل بنجاح!`, 'success');
       } else {
-        showToast('تأكدي من كتابة 4 أعمدة في كل سطر مفصولة بفاصلة', 'danger');
+        showToast('لم يتم العثور على صفوف صالحة، تأكدي من نسخ الأعمدة الأربعة معاً من الإكسل.', 'danger');
       }
     }
 
